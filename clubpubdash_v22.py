@@ -543,7 +543,7 @@ with tab3:
         (store_stats['Average Engagement'] < med_eng)
     ]
     choices = ["Needs Stabilization","Star Performer","Improving","Requires Intervention"]
-    store_stats['Category'] = np.select(conditions, choices)
+    store_stats['Category'] = np.select(conditions, choices, default="Uncategorized").astype(str)
     # Define action plans and explanations
     action_plans = {
         "Star Performer": "Maintain current strategies. Document and share best practices with other stores.",
