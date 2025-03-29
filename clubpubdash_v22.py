@@ -448,40 +448,47 @@ def create_base_chart(data, x_col='Week:O', x_title='Week'):
     )
 
 def create_line_layer(base_chart, y_col, y_title, color_col, color_title, tooltip_cols,
-                      stroke_width=1.5, stroke_dash=None, # Added stroke_dash parameter here
+                      stroke_width=1.5, stroke_dash=None,
                       add_interactive_legend=False):
     """Creates a line layer for an Altair chart, optionally with stroke dash."""
-    # Base mark_line
-    line_mark = base_chart.mark_line(strokeWidth=stroke_width, point=False)
 
-    # Apply strokeDash if provided
+    # Determine if color_col represents a data field or a fixed value
+    is_color_field = isinstance(color_col, str) and ':' in color_col
+
+    # Base mark_line configuration
+    line_mark = base_chart.mark_line(strokeWidth=stroke_width, point=False)
     if stroke_dash:
-        # Option 1: Use configure_line (newer Altair versions)
-        # line_mark = line_mark.configure_line(strokeDash=stroke_dash)
-        # --- OR Option 2: Pass directly to mark_line (check Altair docs for your version) ---
+        # Pass strokeDash directly to mark_line
         line_mark = base_chart.mark_line(strokeWidth=stroke_width, point=False, strokeDash=stroke_dash)
 
-
-    line = line_mark.encode(
+    # --- Encoding Logic ---
+    encoding = line_mark.encode(
         y=alt.Y(y_col, title=y_title),
-        # Handle color encoding correctly whether it's a specific value or a column name
-        color=alt.Color(color_col, title=color_title) if isinstance(color_col, str) and ':' in color_col \
-              else alt.Color(color_col, title=color_title, scale=alt.Scale(scheme='category10')) if isinstance(color_col, str) \
-              else alt.value(color_col), # Use alt.value for direct color strings like 'black' or '#555555'
         tooltip=tooltip_cols
     )
 
+    # Apply color encoding OR fixed value
+    if is_color_field:
+        # Encode color based on a data field
+        encoding = encoding.encode(
+            color=alt.Color(color_col, title=color_title, scale=alt.Scale(scheme='category10'))
+        )
+    else:
+        # Apply a fixed color value directly
+        encoding = encoding.encode(
+            color=alt.value(color_col) # Use alt.value() for fixed colors like 'black', '#555555'
+        )
+
     # Add interactive legend only if color is based on a data field
-    if add_interactive_legend and isinstance(color_col, str) and ':' in color_col:
-        # Extract the field name correctly (before the first ':')
+    if add_interactive_legend and is_color_field:
         field_name = color_col.split(':')[0]
         selection = alt.selection_point(fields=[field_name], bind='legend')
-        line = line.add_params(selection).encode(
+        encoding = encoding.add_params(selection).encode(
             opacity=alt.condition(selection, alt.value(1), alt.value(0.2)),
-            # Adjust strokeWidth based on selection if needed
             strokeWidth=alt.condition(selection, alt.value(stroke_width + 1), alt.value(stroke_width))
         )
-    return line
+
+    return encoding # Return the fully encoded chart object
 
 def create_point_layer(base_chart, y_col, color_col, tooltip_cols, size=80):
      """Creates a point layer for highlighting specific data points."""
