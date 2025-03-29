@@ -654,22 +654,36 @@ anomalies_df = find_anomalies(df_filtered, z_threshold)
 st.subheader("Executive Summary")
 col1, col2, col3 = st.columns(3)
 
+# --- Determine Labels ---
 # Label for average engagement metric
 if store_choice and len(store_choice) == 1:
-    avg_label = f"Store {store_choice[0]} Avg"
+    avg_label_base = f"Store {store_choice[0]} Avg"
 elif store_choice and len(store_choice) < len(available_stores):
-    avg_label = "Selected Stores Avg"
+    avg_label_base = "Selected Stores Avg"
 else:
-    avg_label = "District Avg"
-avg_label += f" (Wk {current_week})" if current_week is not None else ""
+    avg_label_base = "District Avg"
+avg_label = f"{avg_label_base} (Wk {current_week})" if current_week is not None else avg_label_base
 
+# Label for Top Performer (integrating the store number)
+top_perf_label = "Top Performer (Avg)"
+if top_store != "N/A":
+     top_perf_label += f" - Store {top_store}" # Add store number here
+
+# Label for Bottom Performer (integrating the store number)
+bottom_perf_label = "Bottom Performer (Avg)"
+if bottom_store != "N/A":
+     bottom_perf_label += f" - Store {bottom_store}" # Add store number here
+
+# --- Display Metrics ---
 display_metric_card(col1, avg_label, current_avg, delta_avg)
-display_metric_card(col2, f"Top Performer (Avg)", top_val, delta=None, label_suffix=f"Store {top_store}") # Custom display needed
-col2.metric(f"Top Performer (Avg)", f"Store {top_store} ({top_val:.2f}%)" if top_val is not None else "N/A")
-col3.metric(f"Bottom Performer (Avg)", f"Store {bottom_store} ({bottom_val:.2f}%)" if bottom_val is not None else "N/A")
+# Call display_metric_card *without* label_suffix, use the pre-constructed label
+display_metric_card(col2, top_perf_label, top_val, delta=None)
+# Call display_metric_card *without* label_suffix, use the pre-constructed label
+display_metric_card(col3, bottom_perf_label, bottom_val, delta=None)
 
 
 # Trend indicator text
+# (Keep the rest of the trend indicator and store trend display logic as it was)
 if delta_avg is not None:
     delta_abs = abs(delta_avg)
     trend_word = "up" if delta_avg > 0 else "down" if delta_avg < 0 else "flat"
@@ -697,7 +711,6 @@ if not store_stats_df.empty:
         b_trend = bottom_store_info['Trend']
         b_color = "highlight-good" if "Upward" in b_trend else "highlight-bad" if "Downward" in b_trend else "highlight-neutral"
         col2a.markdown(f"**Store {bottom_store}** trend: <span class='{b_color}'>{b_trend}</span>", unsafe_allow_html=True)
-
 
 # --------------------------------------------------------
 # Key Insights (Derived from calculations)
