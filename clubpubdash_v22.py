@@ -64,6 +64,10 @@ APP_CSS = """
         margin-bottom:10px;
         border-left: 5px solid #ccc; /* Default border */
         color: #FFFFFF;
+        height: 100%; /* Make cards in a row equal height */
+        display: flex; /* Enable flexbox */
+        flex-direction: column; /* Stack content vertically */
+        justify-content: space-between; /* Distribute space */
     }
     .info-card h4 { margin-top: 0; margin-bottom: 5px; }
     .info-card p { margin: 5px 0; }
@@ -71,6 +75,10 @@ APP_CSS = """
     .info-card .label { font-size: 0.9em; color: #BBBBBB; }
     .info-card .change { font-size: 0.9em; }
     .info-card .trend-icon { font-size: 1.2em; margin-right: 5px; }
+    /* Ensure consistent height for metric cards in columns */
+     div[data-testid="stMetric"] {
+        /* Add styles if needed, e.g., min-height */
+    }
 </style>
 """
 
@@ -91,11 +99,11 @@ CAT_INTERVENTION = "Requires Intervention"
 CAT_UNCATEGORIZED = "Uncategorized"
 
 PERFORMANCE_CATEGORIES = {
-    CAT_STAR: {"icon": "⭐", "color": "#2E7D32", "explanation": "High engagement with stable or improving trend", "action": "Share best practices", "short_action": "Share best practices"},
-    CAT_STABILIZE: {"icon": "⚠️", "color": "#F57C00", "explanation": "High engagement but recent downward trend", "action": "Investigate recent changes. Reinforce processes.", "short_action": "Reinforce successful processes"},
-    CAT_IMPROVING: {"icon": "📈", "color": "#1976D2", "explanation": "Below average engagement but trending upward", "action": "Continue positive momentum. Intensify efforts.", "short_action": "Continue positive momentum"},
-    CAT_INTERVENTION: {"icon": "🚨", "color": "#C62828", "explanation": "Below average engagement with flat or declining trend", "action": "Urgent attention needed. Develop improvement plan.", "short_action": "Needs comprehensive support"},
-    CAT_UNCATEGORIZED: {"icon": "❓", "color": "#757575", "explanation": "Not enough data or unusual pattern", "action": "Monitor closely.", "short_action": "Monitor closely"},
+    CAT_STAR: {"icon": "⭐", "color": "#2E7D32", "explanation": "High engagement with stable or improving trend", "action": "Maintain current strategies. Document and share best practices with other stores.", "short_action": "Share best practices"},
+    CAT_STABILIZE: {"icon": "⚠️", "color": "#F57C00", "explanation": "High engagement but recent downward trend", "action": "Investigate recent changes or inconsistencies. Reinforce processes to prevent decline.", "short_action": "Reinforce successful processes"},
+    CAT_IMPROVING: {"icon": "📈", "color": "#1976D2", "explanation": "Below average engagement but trending upward", "action": "Continue positive momentum. Intensify efforts driving improvement.", "short_action": "Continue positive momentum"},
+    CAT_INTERVENTION: {"icon": "🚨", "color": "#C62828", "explanation": "Below average engagement with flat or declining trend", "action": "Urgent attention needed. Develop a comprehensive improvement plan.", "short_action": "Needs comprehensive support"},
+    CAT_UNCATEGORIZED: {"icon": "❓", "color": "#757575", "explanation": "Not enough data or unusual pattern", "action": "Monitor closely. Ensure data quality.", "short_action": "Monitor closely"},
 }
 
 # Trend Classification Thresholds
@@ -116,34 +124,50 @@ DEFAULT_COLOR_SCHEME = "blues"
 # --- Helper Functions ---
 
 def safe_mean(series: pd.Series) -> Optional[float]:
-    """Calculate mean of a series, handling potential empty series."""
-    return series.mean() if not series.empty else None
+    """Calculate mean of a series, handling potential empty or all-NaN series."""
+    if series is None or series.empty or series.isna().all():
+        return None
+    return series.mean()
 
 def safe_max(series: pd.Series) -> Optional[Any]:
-    """Get max value of a series, handling potential empty series."""
-    return series.max() if not series.empty else None
+    """Get max value of a series, handling potential empty or all-NaN series."""
+    if series is None or series.empty or series.isna().all():
+        return None
+    return series.max()
 
 def safe_min(series: pd.Series) -> Optional[Any]:
-    """Get min value of a series, handling potential empty series."""
-    return series.min() if not series.empty else None
+    """Get min value of a series, handling potential empty or all-NaN series."""
+    if series is None or series.empty or series.isna().all():
+        return None
+    return series.min()
 
 def safe_idxmax(series: pd.Series) -> Optional[Any]:
-    """Get index of max value, handling potential empty series."""
-    return series.idxmax() if not series.empty else None
+    """Get index of max value, handling potential empty or all-NaN series."""
+    if series is None or series.empty or series.isna().all():
+        return None
+    try:
+        return series.idxmax()
+    except ValueError: # Handle case where all values are NaN
+        return None
 
 def safe_idxmin(series: pd.Series) -> Optional[Any]:
-    """Get index of min value, handling potential empty series."""
-    return series.idxmin() if not series.empty else None
+    """Get index of min value, handling potential empty or all-NaN series."""
+    if series is None or series.empty or series.isna().all():
+        return None
+    try:
+        return series.idxmin()
+    except ValueError: # Handle case where all values are NaN
+        return None
 
 def format_delta(value: Optional[float], unit: str = "%") -> str:
     """Format a delta value with sign and unit."""
-    if value is None:
+    if value is None or pd.isna(value):
         return "N/A"
     return f"{value:+.2f}{unit}"
 
 def format_percentage(value: Optional[float]) -> str:
     """Format a value as a percentage string."""
-    if value is None:
+    if value is None or pd.isna(value):
         return "N/A"
     return f"{value:.2f}%"
 
@@ -157,7 +181,12 @@ def read_data_file(uploaded_file) -> Optional[pd.DataFrame]:
     try:
         name = uploaded_file.name.lower()
         if name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
+            # Try to sniff encoding, default to utf-8, fallback to latin1
+            try:
+                df = pd.read_csv(uploaded_file, encoding='utf-8')
+            except UnicodeDecodeError:
+                uploaded_file.seek(0) # Reset file pointer
+                df = pd.read_csv(uploaded_file, encoding='latin1')
         elif name.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(uploaded_file)
         else:
@@ -170,74 +199,102 @@ def read_data_file(uploaded_file) -> Optional[pd.DataFrame]:
 
 def standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Standardizes column names based on predefined patterns."""
-    df.columns = [col.strip() for col in df.columns]
+    df.columns = [str(col).strip() for col in df.columns] # Ensure col names are strings
     col_map = {}
     current_cols = df.columns.tolist()
-    mapped_cols = set()
+    mapped_cols = set() # Track which target columns have been mapped
 
-    # Prioritize specific date/week columns first
-    date_col_found = False
-    for col in current_cols:
-        cl = col.lower()
-        if 'week ending' in cl or cl == 'date':
-            if COL_DATE not in mapped_cols:
-                col_map[col] = COL_DATE
-                mapped_cols.add(COL_DATE)
-                date_col_found = True
-                break # Found the preferred date column
+    # Define mapping priorities (e.g., 'week ending' before generic 'week')
+    patterns_priority = [
+        ('week ending', COL_DATE),
+        ('date', COL_DATE),
+        ('store', COL_STORE_ID),
+        ('engaged', COL_ENGAGED_PCT),
+        ('engagement', COL_ENGAGED_PCT),
+        ('rank', COL_RANK),
+        ('quarter', COL_QTD_PCT),
+        ('qtd', COL_QTD_PCT),
+        ('week', COL_WEEK) # Lower priority for generic 'week'
+    ]
 
-    # Map other columns
-    for col in current_cols:
-        if col in col_map: continue # Already mapped
-        cl = col.lower()
-        # Map week only if date wasn't found and week hasn't been mapped
-        if 'week' in cl and not date_col_found and COL_WEEK not in mapped_cols:
-             # Check if it looks like a week number (e.g., "Week 1", "Week")
-             # Avoid mapping things like "Weekly Rank" here
-            if cl == 'week' or cl.startswith('week '):
-                 col_map[col] = COL_WEEK
-                 mapped_cols.add(COL_WEEK)
-        else:
-            for pattern, target_col in INPUT_COLUMN_MAP_PATTERNS.items():
-                if pattern in cl and target_col not in mapped_cols:
-                    # Avoid mapping 'week' if it's part of 'weekly rank' etc.
-                    if pattern == 'week' and ('rank' in cl or 'ending' in cl):
-                        continue
-                    col_map[col] = target_col
-                    mapped_cols.add(target_col)
-                    break # Move to next column once mapped
+    # Apply mappings based on priority
+    for pattern, target_col in patterns_priority:
+        if target_col in mapped_cols: continue # Skip if target already mapped
 
-    df = df.rename(columns=col_map)
-    # Keep only potentially mapped columns + original unmapped ones if needed
-    # For simplicity here, we assume the mapped columns are the primary ones needed.
-    # A more robust approach might involve explicitly listing required output columns.
-    return df
+        for col in current_cols:
+            if col in col_map: continue # Skip if source column already mapped
+
+            cl = col.lower()
+            # Check if pattern is in the lowercased column name
+            if pattern in cl:
+                 # Specific exclusion for 'week' to avoid mapping 'weekly rank'
+                 if pattern == 'week' and ('rank' in cl or 'ending' in cl):
+                     continue
+                 # Map if target not already mapped
+                 if target_col not in mapped_cols:
+                     col_map[col] = target_col
+                     mapped_cols.add(target_col)
+                     # Once a target is mapped, break inner loop if pattern allows only one source
+                     # (e.g., don't map multiple columns to 'Store #')
+                     # For now, allow multiple sources to potentially map if names overlap,
+                     # but the first one found based on priority wins for the target.
+                     # This logic might need refinement based on actual data variations.
+
+
+    df_renamed = df.rename(columns=col_map)
+
+    # Check for essential columns after renaming
+    missing_essentials = []
+    if COL_STORE_ID not in df_renamed.columns: missing_essentials.append('Store ID')
+    if COL_ENGAGED_PCT not in df_renamed.columns: missing_essentials.append('Engagement %')
+    if COL_DATE not in df_renamed.columns and COL_WEEK not in df_renamed.columns: missing_essentials.append('Date or Week')
+
+    if missing_essentials:
+         st.warning(f"Could not find columns for: {', '.join(missing_essentials)}. Please check input file headers.")
+         # Return the renamed df anyway, subsequent steps will handle missing columns
+         return df_renamed
+
+
+    return df_renamed
 
 def preprocess_data(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     """Performs type conversions, cleaning, and adds derived columns."""
-    # Convert percentages
+
+    # --- Type Conversion ---
+    # Convert percentages first
     for percent_col in [COL_ENGAGED_PCT, COL_QTD_PCT]:
         if percent_col in df.columns:
-            # Convert to string, remove '%', then convert to numeric
-            df[percent_col] = pd.to_numeric(df[percent_col].astype(str).str.replace('%', '', regex=False), errors='coerce')
+            # Convert to string, remove '%', handle potential errors, then convert to numeric
+            # Replace non-breaking spaces and other potential whitespace issues
+            s = df[percent_col].astype(str).str.replace('%', '', regex=False).str.replace(r'\s+', '', regex=True)
+            df[percent_col] = pd.to_numeric(s, errors='coerce')
+            # Optional: Check for unusually large/small percentages (e.g., > 100)
+            # if (df[percent_col] > 100).any() or (df[percent_col] < 0).any():
+            #     st.warning(f"Found potential invalid values (outside 0-100) in '{percent_col}'.")
 
-    # Ensure essential column exists and drop rows where it's NaN
+    # Ensure essential column exists and drop rows where it's NaN AFTER conversion
     if COL_ENGAGED_PCT not in df.columns:
-         st.error(f"Essential column '{COL_ENGAGED_PCT}' not found after standardization. Please check input file.")
+         # Standardization should have warned, but double-check
+         st.error(f"Essential column '{COL_ENGAGED_PCT}' not found.")
          return None
+    initial_rows = len(df)
     df = df.dropna(subset=[COL_ENGAGED_PCT])
     if df.empty:
-        st.warning("No valid data remaining after removing rows with missing engagement percentage.")
+        st.warning(f"No valid data remaining after removing rows with missing '{COL_ENGAGED_PCT}'. (Removed {initial_rows} rows).")
         return None
+    if len(df) < initial_rows:
+         st.caption(f"Removed {initial_rows - len(df)} rows with missing '{COL_ENGAGED_PCT}'.")
 
-    # Handle Date/Week and Quarter derivation
+
+    # --- Handle Date/Week and Quarter derivation ---
     if COL_DATE in df.columns:
         df[COL_DATE] = pd.to_datetime(df[COL_DATE], errors='coerce')
         df = df.dropna(subset=[COL_DATE])
         if df.empty:
              st.warning("No valid data remaining after handling dates.")
              return None
-        df[COL_WEEK] = df[COL_DATE].dt.isocalendar().week.astype(int) # Use ISO week
+        # Use isocalendar for potentially more standard week definition
+        df[COL_WEEK] = df[COL_DATE].dt.isocalendar().week.astype(int)
         df[COL_QUARTER] = df[COL_DATE].dt.quarter.astype(int)
     elif COL_WEEK in df.columns:
         # Ensure Week is numeric integer
@@ -247,23 +304,39 @@ def preprocess_data(df: pd.DataFrame) -> Optional[pd.DataFrame]:
              st.warning("No valid data remaining after handling week numbers.")
              return None
         df[COL_WEEK] = df[COL_WEEK].astype(int)
-        # Derive Quarter from Week (approximate)
+        # Derive Quarter from Week (approximate, assumes standard fiscal year)
         df[COL_QUARTER] = ((df[COL_WEEK] - 1) // 13 + 1).astype(int)
+        # Validate derived quarter is within 1-4
+        df[COL_QUARTER] = df[COL_QUARTER].apply(lambda x: x if 1 <= x <= 4 else pd.NA)
+        df = df.dropna(subset=[COL_QUARTER]) # Remove rows with invalid derived quarter
+        df[COL_QUARTER] = df[COL_QUARTER].astype(int)
+        if df.empty:
+             st.warning("No valid data remaining after deriving quarters from week numbers.")
+             return None
     else:
+        # Standardization should have warned
         st.error(f"Missing required time column: Neither '{COL_DATE}' nor '{COL_WEEK}' found.")
         return None
 
-    # Convert other columns
+    # --- Convert other columns ---
     if COL_RANK in df.columns:
         df[COL_RANK] = pd.to_numeric(df[COL_RANK], errors='coerce').astype('Int64') # Use nullable Int
     if COL_STORE_ID in df.columns:
-        df[COL_STORE_ID] = df[COL_STORE_ID].astype(str)
+        # Trim whitespace from store IDs
+        df[COL_STORE_ID] = df[COL_STORE_ID].astype(str).str.strip()
     else:
          st.error(f"Missing required '{COL_STORE_ID}' column.")
          return None
 
-    # Sort and return
-    df = df.sort_values([COL_WEEK, COL_STORE_ID])
+    # --- Final Checks & Sort ---
+    # Check for duplicate entries for the same store in the same week
+    duplicates = df.duplicated(subset=[COL_STORE_ID, COL_WEEK], keep=False)
+    if duplicates.any():
+        st.warning(f"Found {duplicates.sum()} duplicate entries for the same store and week. Consider cleaning the input data. Using the first occurrence.")
+        df = df.drop_duplicates(subset=[COL_STORE_ID, COL_WEEK], keep='first')
+
+
+    df = df.sort_values([COL_STORE_ID, COL_WEEK]) # Sort by store then week
     return df
 
 def load_and_process_data(uploaded_file) -> Optional[pd.DataFrame]:
@@ -277,7 +350,7 @@ def load_and_process_data(uploaded_file) -> Optional[pd.DataFrame]:
 
 # --- Filtering Logic ---
 
-def filter_dataframe(df: pd.DataFrame, quarter_choice: str, week_choice: str, store_choice: List[str]) -> pd.DataFrame:
+def filter_dataframe(df: Optional[pd.DataFrame], quarter_choice: str, week_choice: str, store_choice: List[str]) -> pd.DataFrame:
     """Filters the DataFrame based on sidebar selections."""
     if df is None or df.empty:
         return pd.DataFrame() # Return empty DataFrame if input is invalid
@@ -286,25 +359,25 @@ def filter_dataframe(df: pd.DataFrame, quarter_choice: str, week_choice: str, st
 
     # Filter by Quarter
     if quarter_choice != "All":
-        try:
-            q_num = int(quarter_choice.replace('Q', ''))
-            if COL_QUARTER in df_filtered.columns:
+        if COL_QUARTER in df_filtered.columns:
+            try:
+                q_num = int(quarter_choice.replace('Q', ''))
                 df_filtered = df_filtered[df_filtered[COL_QUARTER] == q_num]
-            else:
-                st.warning("Quarter column not available for filtering.")
-        except ValueError:
-            st.warning(f"Invalid Quarter selection: {quarter_choice}")
+            except ValueError:
+                st.warning(f"Invalid Quarter selection: {quarter_choice}")
+        else:
+            st.warning("Quarter column not available for filtering.")
 
     # Filter by Week
     if week_choice != "All":
-        try:
-            week_num = int(week_choice)
-            if COL_WEEK in df_filtered.columns:
+         if COL_WEEK in df_filtered.columns:
+            try:
+                week_num = int(week_choice)
                 df_filtered = df_filtered[df_filtered[COL_WEEK] == week_num]
-            else:
-                st.warning("Week column not available for filtering.")
-        except ValueError:
-            st.warning(f"Invalid Week selection: {week_choice}")
+            except ValueError:
+                st.warning(f"Invalid Week selection: {week_choice}")
+         else:
+             st.warning("Week column not available for filtering.")
 
     # Filter by Store
     if store_choice: # If list is not empty
@@ -318,29 +391,45 @@ def filter_dataframe(df: pd.DataFrame, quarter_choice: str, week_choice: str, st
 # --- Analysis Functions ---
 
 def calculate_trend_slope(group: pd.DataFrame, window: int) -> float:
-    """Calculates the slope of the engagement trend over a window."""
-    if len(group) < 2: return 0.0
+    """
+    Calculates the slope of the engagement trend over a specified window
+    using linear regression. Handles potential issues with insufficient data,
+    NaNs, or constant values.
+    """
+    required_cols = [COL_WEEK, COL_ENGAGED_PCT]
+    if not all(col in group.columns for col in required_cols): return 0.0
+
+    # Ensure data is sorted by week within the group
     data = group.sort_values(COL_WEEK).tail(window)
+
+    # Check for sufficient data points
     if len(data) < 2: return 0.0
-    # Use simple linear regression slope
-    # Center x values for potentially better numerical stability
-    x = data[COL_WEEK].values - np.mean(data[COL_WEEK].values)
+
+    # Prepare x (week) and y (engagement) values
+    x = data[COL_WEEK].values
     y = data[COL_ENGAGED_PCT].values
-    # Check for NaNs in y after filtering
-    if np.isnan(y).any(): return 0.0
-    # Check for constant x or y values which polyfit handles poorly
-    if np.all(x == x[0]) or np.all(y == y[0]): return 0.0
+
+    # Check for NaNs in y (should be handled by preprocessing, but double-check)
+    if pd.isna(y).any(): return 0.0
+
+    # Check for constant x or y values (polyfit can fail or give misleading results)
+    if len(set(x)) < 2 or len(set(y)) < 2: return 0.0
+
+    # Center x values for potentially better numerical stability
+    x_centered = x - np.mean(x)
 
     try:
-        slope = np.polyfit(x, y, 1)[0]
-        return slope if not np.isnan(slope) else 0.0
+        # Calculate slope using polyfit (degree 1 for linear)
+        slope = np.polyfit(x_centered, y, 1)[0]
+        # Return slope, ensuring it's not NaN
+        return slope if pd.notna(slope) else 0.0
     except (np.linalg.LinAlgError, ValueError):
-        # Handle cases where polyfit might fail
+        # Handle cases where polyfit might fail (e.g., singular matrix)
         return 0.0
 
 
 def classify_trend(slope: float) -> str:
-    """Classifies trend based on slope value."""
+    """Classifies trend based on slope value using predefined thresholds."""
     if slope > TREND_STRONG_UP: return "Strong Upward"
     elif slope > TREND_UP: return "Upward"
     elif slope < TREND_STRONG_DOWN: return "Strong Downward"
@@ -348,11 +437,15 @@ def classify_trend(slope: float) -> str:
     else: return "Stable"
 
 def calculate_store_trends(df: pd.DataFrame, window: int) -> pd.Series:
-    """Calculates the trend classification for each store."""
-    if df.empty or COL_STORE_ID not in df.columns or COL_WEEK not in df.columns or COL_ENGAGED_PCT not in df.columns:
+    """Calculates the trend classification for each store over the given period."""
+    required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
+    if df.empty or not all(col in df.columns for col in required_cols):
         return pd.Series(dtype=str)
 
+    # Group by store and apply the slope calculation
     store_slopes = df.groupby(COL_STORE_ID).apply(lambda g: calculate_trend_slope(g, window))
+
+    # Classify the trend based on the calculated slopes
     store_trends = store_slopes.apply(classify_trend)
     return store_trends
 
@@ -364,10 +457,11 @@ def get_executive_summary_data(df_filtered: pd.DataFrame, df_all: pd.DataFrame, 
         'avg_label': "District Avg Engagement", 'store_trends': pd.Series(dtype=str),
         'delta_val': None, 'trend_dir': 'flat', 'trend_class': 'highlight-neutral'
     }
-    if df_filtered.empty or COL_WEEK not in df_filtered.columns or COL_ENGAGED_PCT not in df_filtered.columns:
+    required_cols = [COL_WEEK, COL_ENGAGED_PCT, COL_STORE_ID]
+    if df_filtered.empty or not all(col in df_filtered.columns for col in required_cols):
         return summary
 
-    # Determine current and previous week
+    # Determine current and previous week within the filtered data
     available_weeks = sorted(df_filtered[COL_WEEK].unique())
     if not available_weeks: return summary
 
@@ -375,30 +469,29 @@ def get_executive_summary_data(df_filtered: pd.DataFrame, df_all: pd.DataFrame, 
     if len(available_weeks) > 1:
         summary['prev_week'] = int(available_weeks[-2])
     else:
-        # Look for previous week in the *unfiltered* data within the same quarter if applicable
+        # If only one week filtered, look for previous week in the *unfiltered* data
+        # Consider quarter context if available
         current_quarter = df_filtered[COL_QUARTER].iloc[0] if COL_QUARTER in df_filtered.columns and not df_filtered.empty else None
-        prev_weeks_all = sorted(df_all[df_all[COL_WEEK] < summary['current_week']][COL_WEEK].unique())
-        if current_quarter:
-            prev_weeks_all = sorted(df_all[(df_all[COL_WEEK] < summary['current_week']) & (df_all[COL_QUARTER] == current_quarter)][COL_WEEK].unique())
+        potential_prev_weeks = df_all[df_all[COL_WEEK] < summary['current_week']]
+        if current_quarter and COL_QUARTER in potential_prev_weeks.columns:
+            potential_prev_weeks = potential_prev_weeks[potential_prev_weeks[COL_QUARTER] == current_quarter]
 
-        if prev_weeks_all:
-            summary['prev_week'] = int(prev_weeks_all[-1])
+        if not potential_prev_weeks.empty:
+             summary['prev_week'] = int(potential_prev_weeks[COL_WEEK].max())
 
 
-    # Calculate averages
+    # Calculate averages for the determined weeks
     current_data = df_filtered[df_filtered[COL_WEEK] == summary['current_week']]
     summary['current_avg'] = safe_mean(current_data[COL_ENGAGED_PCT])
 
     if summary['prev_week'] is not None:
-        # Use df_all to get previous week data if it wasn't in the filtered set (e.g., single week selected)
-        prev_data = df_all[df_all[COL_WEEK] == summary['prev_week']]
-        # Apply store filter if necessary
-        if store_choice:
-             prev_data = prev_data[prev_data[COL_STORE_ID].isin(store_choice)]
-        summary['prev_avg'] = safe_mean(prev_data[COL_ENGAGED_PCT])
+        # Use df_all to get previous week data, then apply store filter if needed
+        prev_data_all = df_all[df_all[COL_WEEK] == summary['prev_week']]
+        prev_data_filtered = filter_dataframe(prev_data_all, "All", str(summary['prev_week']), store_choice) # Apply store filter
+        summary['prev_avg'] = safe_mean(prev_data_filtered[COL_ENGAGED_PCT])
 
 
-    # Calculate Top/Bottom Performers for the current week
+    # Calculate Top/Bottom Performers for the current week from filtered data
     if not current_data.empty:
         store_perf_current = current_data.groupby(COL_STORE_ID)[COL_ENGAGED_PCT].mean()
         summary['top_store'] = safe_idxmax(store_perf_current)
@@ -406,104 +499,125 @@ def get_executive_summary_data(df_filtered: pd.DataFrame, df_all: pd.DataFrame, 
         summary['top_val'] = safe_max(store_perf_current)
         summary['bottom_val'] = safe_min(store_perf_current)
 
-    # Calculate Trends (using all data in the filtered period for trend calculation)
+    # Calculate Trends using all data in the filtered period
     summary['store_trends'] = calculate_store_trends(df_filtered, trend_window)
 
-    # Determine Average Label
+    # Determine Average Label based on store selection
     if store_choice and len(store_choice) == 1:
         summary['avg_label'] = f"Store {store_choice[0]} Engagement"
     elif store_choice and len(store_choice) < len(all_stores_list):
         summary['avg_label'] = "Selected Stores Avg Engagement"
+    # Default is "District Avg Engagement"
 
-    # Calculate Delta and Trend Direction/Class
+    # Calculate Delta and Trend Direction/Class for the average
     if summary['current_avg'] is not None and summary['prev_avg'] is not None:
         summary['delta_val'] = summary['current_avg'] - summary['prev_avg']
-        if summary['delta_val'] > 0.01: # Add small tolerance
+        # Add a small tolerance to avoid classifying tiny changes
+        if summary['delta_val'] > 0.01:
             summary['trend_dir'] = "up"
             summary['trend_class'] = "highlight-good"
         elif summary['delta_val'] < -0.01:
             summary['trend_dir'] = "down"
             summary['trend_class'] = "highlight-bad"
+        # Default is 'flat' / 'highlight-neutral'
 
     return summary
 
 def generate_key_insights(df_filtered: pd.DataFrame, store_trends: pd.Series, store_perf: pd.Series) -> List[str]:
-    """Generates a list of key insight strings."""
+    """Generates a list of key insight strings based on filtered data."""
     insights = []
-    if df_filtered.empty or store_trends.empty or store_perf.empty or len(store_perf) < 1:
+    required_cols = [COL_STORE_ID, COL_ENGAGED_PCT]
+    if df_filtered.empty or not all(col in df_filtered.columns for col in required_cols):
         return ["No data available for insights."]
 
-    # 1. Consistency Insights
-    if COL_STORE_ID in df_filtered.columns and COL_ENGAGED_PCT in df_filtered.columns:
-        store_std = df_filtered.groupby(COL_STORE_ID)[COL_ENGAGED_PCT].std().fillna(0)
-        if not store_std.empty:
-            most_consistent = safe_idxmin(store_std)
-            least_consistent = safe_idxmax(store_std)
-            if most_consistent:
-                insights.append(f"**Store {most_consistent}** shows the most consistent engagement (std: {store_std[most_consistent]:.2f}%).")
-            if least_consistent:
-                insights.append(f"**Store {least_consistent}** has the most variable engagement (std: {store_std[least_consistent]:.2f}%).")
+    # 1. Consistency Insights (Standard Deviation)
+    store_std = df_filtered.groupby(COL_STORE_ID)[COL_ENGAGED_PCT].std().fillna(0)
+    if not store_std.empty and len(store_std) > 1: # Need >1 store for comparison
+        most_consistent_store = safe_idxmin(store_std)
+        least_consistent_store = safe_idxmax(store_std)
+        if most_consistent_store is not None:
+            insights.append(f"**Store {most_consistent_store}** shows the most consistent engagement (std: {store_std[most_consistent_store]:.2f}%).")
+        if least_consistent_store is not None and least_consistent_store != most_consistent_store:
+            insights.append(f"**Store {least_consistent_store}** has the most variable engagement (std: {store_std[least_consistent_store]:.2f}%).")
 
-    # 2. Trending Stores Insights
-    trending_up = store_trends[store_trends.isin(["Upward", "Strong Upward"])].index.tolist()
-    trending_down = store_trends[store_trends.isin(["Downward", "Strong Downward"])].index.tolist()
-    if trending_up:
-        insights.append("Stores showing positive trends: " + ", ".join(f"**{s}**" for s in trending_up))
-    if trending_down:
-        insights.append("Stores needing attention (downward trend): " + ", ".join(f"**{s}**" for s in trending_down))
+    # 2. Trending Stores Insights (Based on calculated trends for the period)
+    if not store_trends.empty:
+        trending_up = store_trends[store_trends.isin(["Upward", "Strong Upward"])].index.tolist()
+        trending_down = store_trends[store_trends.isin(["Downward", "Strong Downward"])].index.tolist()
+        if trending_up:
+            insights.append("Stores showing positive trends over the period: " + ", ".join(f"**{s}**" for s in trending_up))
+        if trending_down:
+            insights.append("Stores needing attention (downward trend over period): " + ", ".join(f"**{s}**" for s in trending_down))
 
-    # 3. Performance Gap Insights
-    if len(store_perf) > 1:
+    # 3. Performance Gap Insights (Based on average performance over the period)
+    if not store_perf.empty and len(store_perf) > 1:
         top_val = safe_max(store_perf)
         bottom_val = safe_min(store_perf)
         if top_val is not None and bottom_val is not None:
             gap = top_val - bottom_val
-            insights.append(f"Gap between highest ({top_val:.2f}%) and lowest ({bottom_val:.2f}%) performing stores: **{gap:.2f}%**")
-            if gap > 10: # Arbitrary threshold for large gap
+            insights.append(f"Performance gap between highest ({top_val:.2f}%) and lowest ({bottom_val:.2f}%) stores (avg over period): **{gap:.2f}%**")
+            if gap > 10: # Arbitrary threshold for large gap warning
                 insights.append("🚨 Large performance gap suggests opportunities for knowledge sharing from top performers.")
+
+    if not insights:
+         return ["No specific insights generated from the current data selection."]
 
     return insights[:5] # Limit to top 5 insights
 
 def calculate_moving_averages(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculates the 4-week moving average for engagement."""
-    if df is None or df.empty or COL_ENGAGED_PCT not in df.columns:
-        # Ensure the column exists even if empty or calculation fails
-        if df is not None:
-             df[COL_MA_4W] = np.nan
-        return df if df is not None else pd.DataFrame()
+    """Calculates the 4-week moving average for engagement for each store."""
+    if df is None or df.empty:
+        return pd.DataFrame(columns=df.columns.tolist() + [COL_MA_4W] if df is not None else [COL_MA_4W])
 
+    required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
+    # Ensure the column exists even if calculation fails or no data
+    if COL_MA_4W not in df.columns:
+        df[COL_MA_4W] = np.nan
 
+    if not all(col in df.columns for col in required_cols):
+        # Return df with NaN MA column if required cols missing
+        return df
+
+    # Sort before calculating rolling average
     df = df.sort_values([COL_STORE_ID, COL_WEEK])
+
     # Calculate MA within each store group
-    # Handle potential grouping issues if COL_STORE_ID is missing (though checked earlier)
-    if COL_STORE_ID in df.columns:
-        df[COL_MA_4W] = df.groupby(COL_STORE_ID)[COL_ENGAGED_PCT].transform(
-            lambda s: s.rolling(window=4, min_periods=1).mean()
-        )
-    else:
-         df[COL_MA_4W] = np.nan # Assign NaN if grouping column is missing
+    df[COL_MA_4W] = df.groupby(COL_STORE_ID, group_keys=False)[COL_ENGAGED_PCT].apply(
+        lambda s: s.rolling(window=DEFAULT_TREND_WINDOW, min_periods=1).mean()
+    )
     return df
 
-def calculate_district_trends(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_district_trends(df: Optional[pd.DataFrame]) -> pd.DataFrame:
     """Calculates the district average and its moving average."""
-    if df is None or df.empty or COL_WEEK not in df.columns or COL_ENGAGED_PCT not in df.columns:
-        return pd.DataFrame(columns=[COL_WEEK, 'Average Engagement %', COL_MA_4W])
+    default_cols = [COL_WEEK, 'Average Engagement %', COL_MA_4W]
+    if df is None or df.empty:
+        return pd.DataFrame(columns=default_cols)
 
+    required_cols = [COL_WEEK, COL_ENGAGED_PCT]
+    if not all(col in df.columns for col in required_cols):
+        return pd.DataFrame(columns=default_cols)
+
+    # Calculate weekly average across selected stores
     dist_trend = df.groupby(COL_WEEK, as_index=False)[COL_ENGAGED_PCT].mean()
     dist_trend = dist_trend.rename(columns={COL_ENGAGED_PCT: 'Average Engagement %'})
     dist_trend = dist_trend.sort_values(COL_WEEK)
-    dist_trend[COL_MA_4W] = dist_trend['Average Engagement %'].rolling(window=4, min_periods=1).mean()
+
+    # Calculate moving average of the district average
+    dist_trend[COL_MA_4W] = dist_trend['Average Engagement %'].rolling(window=DEFAULT_TREND_WINDOW, min_periods=1).mean()
     return dist_trend
 
 
 def calculate_performance_categories(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculates performance stats and assigns categories to stores."""
+    """Calculates performance stats and assigns categories to stores based on filtered data."""
     required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
+    output_cols = [COL_STORE_ID, COL_AVG_ENGAGEMENT, COL_CONSISTENCY, COL_TREND_CORR, COL_CATEGORY, COL_ACTION_PLAN, COL_EXPLANATION]
     if df.empty or not all(col in df.columns for col in required_cols):
-        return pd.DataFrame(columns=[COL_STORE_ID, COL_AVG_ENGAGEMENT, COL_CONSISTENCY, COL_TREND_CORR, COL_CATEGORY, COL_ACTION_PLAN, COL_EXPLANATION])
+        return pd.DataFrame(columns=output_cols)
 
+    # Calculate Mean and Std Dev for each store over the period
     store_stats = df.groupby(COL_STORE_ID)[COL_ENGAGED_PCT].agg(['mean', 'std']).reset_index()
     store_stats.columns = [COL_STORE_ID, COL_AVG_ENGAGEMENT, COL_CONSISTENCY]
+    # Fill NaN std dev (for stores with 1 data point) with 0
     store_stats[COL_CONSISTENCY] = store_stats[COL_CONSISTENCY].fillna(0.0)
 
     # Calculate trend correlation (simple linear correlation between week and engagement)
@@ -519,66 +633,82 @@ def calculate_performance_categories(df: pd.DataFrame) -> pd.DataFrame:
              # Catch any unexpected errors during correlation calculation
              return 0.0
 
-
     trend_corr = df.groupby(COL_STORE_ID).apply(safe_corr)
     store_stats[COL_TREND_CORR] = store_stats[COL_STORE_ID].map(trend_corr).fillna(0.0)
 
     # Assign categories based on median engagement and trend correlation
     median_engagement = store_stats[COL_AVG_ENGAGEMENT].median()
-    # Handle case where median might be NaN if all averages are NaN (unlikely but possible)
+    # Handle case where median might be NaN if all averages are NaN
     if pd.isna(median_engagement):
-         median_engagement = 0 # Assign a default, though categorization might be less meaningful
-
-    conditions = [
-        (store_stats[COL_AVG_ENGAGEMENT] >= median_engagement) & (store_stats[COL_TREND_CORR] < TREND_DOWN), # High Perf, Declining Trend
-        (store_stats[COL_AVG_ENGAGEMENT] >= median_engagement), # High Perf, Stable/Improving Trend
-        (store_stats[COL_AVG_ENGAGEMENT] < median_engagement) & (store_stats[COL_TREND_CORR] > TREND_UP),   # Low Perf, Improving Trend
-        (store_stats[COL_AVG_ENGAGEMENT] < median_engagement)  # Low Perf, Stable/Declining Trend
-    ]
-    choices = [CAT_STABILIZE, CAT_STAR, CAT_IMPROVING, CAT_INTERVENTION]
-    store_stats[COL_CATEGORY] = np.select(conditions, choices, default=CAT_UNCATEGORIZED).astype(str)
+         # If median can't be calculated, categorization is difficult. Assign Uncategorized.
+         st.warning("Could not calculate median engagement. Store categorization may be inaccurate.")
+         store_stats[COL_CATEGORY] = CAT_UNCATEGORIZED
+    else:
+        conditions = [
+            # Note: Order matters here. More specific conditions first.
+            (store_stats[COL_AVG_ENGAGEMENT] >= median_engagement) & (store_stats[COL_TREND_CORR] < TREND_DOWN), # High Perf, Declining Trend -> Stabilize
+            (store_stats[COL_AVG_ENGAGEMENT] >= median_engagement),                                         # High Perf, Stable/Improving Trend -> Star
+            (store_stats[COL_AVG_ENGAGEMENT] < median_engagement) & (store_stats[COL_TREND_CORR] > TREND_UP),   # Low Perf, Improving Trend -> Improving
+            (store_stats[COL_AVG_ENGAGEMENT] < median_engagement)                                          # Low Perf, Stable/Declining Trend -> Intervention
+        ]
+        choices = [CAT_STABILIZE, CAT_STAR, CAT_IMPROVING, CAT_INTERVENTION]
+        store_stats[COL_CATEGORY] = np.select(conditions, choices, default=CAT_UNCATEGORIZED).astype(str)
 
     # Map explanations and action plans using .get for safety
     store_stats[COL_ACTION_PLAN] = store_stats[COL_CATEGORY].map(lambda x: PERFORMANCE_CATEGORIES.get(x, {}).get('action', 'N/A'))
     store_stats[COL_EXPLANATION] = store_stats[COL_CATEGORY].map(lambda x: PERFORMANCE_CATEGORIES.get(x, {}).get('explanation', 'N/A'))
 
+    # Ensure all output columns exist
+    for col in output_cols:
+        if col not in store_stats.columns:
+            store_stats[col] = pd.NA # Or appropriate default
 
-    return store_stats
+    return store_stats[output_cols] # Return with defined columns
 
 
 def find_anomalies(df: pd.DataFrame, z_threshold: float) -> pd.DataFrame:
-    """Detects anomalies based on week-over-week changes using Z-score."""
+    """Detects anomalies based on week-over-week changes using Z-score within the filtered data."""
     required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
+    output_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT, COL_CHANGE_PCT_PTS, COL_Z_SCORE, COL_PREV_WEEK, COL_RANK, COL_PREV_RANK, COL_POSSIBLE_EXPLANATION]
     if df.empty or not all(col in df.columns for col in required_cols):
-        return pd.DataFrame()
+        return pd.DataFrame(columns=output_cols)
 
     anomalies = []
     df = df.sort_values([COL_STORE_ID, COL_WEEK])
 
     for store_id, grp in df.groupby(COL_STORE_ID):
-        grp = grp.reset_index() # Keep original index if needed, but easier to work with 0-based index here
+        # Calculate differences within the group
+        # Ensure Engagement Pct is numeric before diff
+        grp[COL_ENGAGED_PCT] = pd.to_numeric(grp[COL_ENGAGED_PCT], errors='coerce')
         diffs = grp[COL_ENGAGED_PCT].diff() # Keep first NaN
-        if len(diffs.dropna()) < 2: continue # Need at least 2 differences to calculate std dev
 
-        mean_diff = diffs.mean()
-        std_diff = diffs.std()
+        # Need at least 3 data points (2 differences) to calculate std dev reliably
+        valid_diffs = diffs.dropna()
+        if len(valid_diffs) < 2: continue
+
+        mean_diff = valid_diffs.mean()
+        std_diff = valid_diffs.std()
 
         # Avoid division by zero or near-zero std dev
         if std_diff == 0 or pd.isna(std_diff) or std_diff < 1e-6: continue
 
-        # Iterate through differences, starting from the second row (index 1)
-        for i in range(1, len(grp)):
-            diff_val = diffs.iloc[i]
+        # Iterate through differences, starting from the second row (index 1 in the group's context)
+        grp_reset = grp.reset_index() # Use 0-based index for iteration
+        diffs_reset = grp_reset[COL_ENGAGED_PCT].diff()
+
+        for i in range(1, len(grp_reset)):
+            diff_val = diffs_reset.iloc[i]
             if pd.isna(diff_val): continue
 
             z = (diff_val - mean_diff) / std_diff
 
             if abs(z) >= z_threshold:
-                current_row = grp.iloc[i]
-                prev_row = grp.iloc[i-1]
+                current_row = grp_reset.iloc[i]
+                prev_row = grp_reset.iloc[i-1]
 
-                rank_cur = int(current_row[COL_RANK]) if COL_RANK in grp.columns and pd.notna(current_row[COL_RANK]) else None
-                rank_prev = int(prev_row[COL_RANK]) if COL_RANK in grp.columns and pd.notna(prev_row[COL_RANK]) else None
+                # Safely get rank values, default to None if column missing or value NaN
+                rank_cur = int(current_row[COL_RANK]) if COL_RANK in current_row and pd.notna(current_row[COL_RANK]) else None
+                rank_prev = int(prev_row[COL_RANK]) if COL_RANK in prev_row and pd.notna(prev_row[COL_RANK]) else None
 
                 anomaly_record = {
                     COL_STORE_ID: store_id,
@@ -593,45 +723,57 @@ def find_anomalies(df: pd.DataFrame, z_threshold: float) -> pd.DataFrame:
                 anomalies.append(anomaly_record)
 
     if not anomalies:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=output_cols)
 
     anomalies_df = pd.DataFrame(anomalies)
 
-    # Add explanations based on change and rank change
+    # Add explanations based on change direction
     anomalies_df[COL_POSSIBLE_EXPLANATION] = np.where(
         anomalies_df[COL_CHANGE_PCT_PTS] >= 0,
-        "Engagement spiked significantly. Possible promotion or event impact.",
-        "Sharp drop in engagement. Potential system issue or loss of engagement."
+        "Engagement spiked significantly vs store's typical weekly change.",
+        "Sharp drop in engagement vs store's typical weekly change."
     )
 
-    # Add rank change details if available
-    improve_mask = (anomalies_df[COL_CHANGE_PCT_PTS] >= 0) & anomalies_df[COL_PREV_RANK].notna() & anomalies_df[COL_RANK].notna() & (anomalies_df[COL_PREV_RANK] > anomalies_df[COL_RANK])
-    decline_mask = (anomalies_df[COL_CHANGE_PCT_PTS] < 0) & anomalies_df[COL_PREV_RANK].notna() & anomalies_df[COL_RANK].notna() & (anomalies_df[COL_PREV_RANK] < anomalies_df[COL_RANK])
+    # Add rank change details if rank columns exist and values are not NaN
+    if COL_RANK in anomalies_df.columns and COL_PREV_RANK in anomalies_df.columns:
+        improve_mask = (anomalies_df[COL_CHANGE_PCT_PTS] >= 0) & anomalies_df[COL_PREV_RANK].notna() & anomalies_df[COL_RANK].notna() & (anomalies_df[COL_PREV_RANK] > anomalies_df[COL_RANK])
+        decline_mask = (anomalies_df[COL_CHANGE_PCT_PTS] < 0) & anomalies_df[COL_PREV_RANK].notna() & anomalies_df[COL_RANK].notna() & (anomalies_df[COL_PREV_RANK] < anomalies_df[COL_RANK])
 
-    # Use .loc for safe assignment
-    if improve_mask.any():
-        anomalies_df.loc[improve_mask, COL_POSSIBLE_EXPLANATION] += " (Improved from rank " + anomalies_df.loc[improve_mask, COL_PREV_RANK].astype(int).astype(str) + " to " + anomalies_df.loc[improve_mask, COL_RANK].astype(int).astype(str) + ".)"
-    if decline_mask.any():
-        anomalies_df.loc[decline_mask, COL_POSSIBLE_EXPLANATION] += " (Dropped from rank " + anomalies_df.loc[decline_mask, COL_PREV_RANK].astype(int).astype(str) + " to " + anomalies_df.loc[decline_mask, COL_RANK].astype(int).astype(str) + ".)"
+        # Use .loc for safe assignment
+        if improve_mask.any():
+            anomalies_df.loc[improve_mask, COL_POSSIBLE_EXPLANATION] += " Rank improved from " + anomalies_df.loc[improve_mask, COL_PREV_RANK].astype(int).astype(str) + " to " + anomalies_df.loc[improve_mask, COL_RANK].astype(int).astype(str) + "."
+        if decline_mask.any():
+            anomalies_df.loc[decline_mask, COL_POSSIBLE_EXPLANATION] += " Rank dropped from " + anomalies_df.loc[decline_mask, COL_PREV_RANK].astype(int).astype(str) + " to " + anomalies_df.loc[decline_mask, COL_RANK].astype(int).astype(str) + "."
 
 
-    # Sort by absolute Z-score and format
-    anomalies_df['Abs Z'] = anomalies_df[COL_Z_SCORE].abs()
-    anomalies_df = anomalies_df.sort_values('Abs Z', ascending=False).drop(columns=['Abs Z'])
-    anomalies_df[[COL_ENGAGED_PCT, COL_Z_SCORE, COL_CHANGE_PCT_PTS]] = anomalies_df[[COL_ENGAGED_PCT, COL_Z_SCORE, COL_CHANGE_PCT_PTS]].round(2)
+    # Sort by absolute Z-score and format numeric columns
+    if not anomalies_df.empty:
+        anomalies_df['Abs Z'] = anomalies_df[COL_Z_SCORE].abs()
+        anomalies_df = anomalies_df.sort_values('Abs Z', ascending=False).drop(columns=['Abs Z'])
+        anomalies_df[[COL_ENGAGED_PCT, COL_Z_SCORE, COL_CHANGE_PCT_PTS]] = anomalies_df[[COL_ENGAGED_PCT, COL_Z_SCORE, COL_CHANGE_PCT_PTS]].round(2)
 
-    return anomalies_df
+    # Ensure all expected output columns exist
+    for col in output_cols:
+        if col not in anomalies_df.columns:
+             anomalies_df[col] = pd.NA # Or appropriate default
+
+    return anomalies_df[output_cols]
 
 
 def generate_recommendations(df_filtered: pd.DataFrame, store_stats: pd.DataFrame, anomalies_df: pd.DataFrame, trend_window: int) -> pd.DataFrame:
     """Generates store-specific recommendations based on category, trend, and anomalies."""
     recommendations = []
-    all_store_ids = sorted(df_filtered[COL_STORE_ID].unique()) if COL_STORE_ID in df_filtered.columns else []
+    output_cols = [COL_STORE_ID, COL_CATEGORY, 'Current Trend', COL_AVG_ENGAGEMENT, 'Recommendation']
+    required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
 
-    if not all_store_ids or df_filtered.empty:
-        return pd.DataFrame()
+    if df_filtered.empty or not all(col in df_filtered.columns for col in required_cols):
+        return pd.DataFrame(columns=output_cols)
 
-    # Recalculate trends based on the *filtered* data for current context
+    all_store_ids = sorted(df_filtered[COL_STORE_ID].unique())
+    if not all_store_ids:
+        return pd.DataFrame(columns=output_cols)
+
+    # Recalculate trends based on the *filtered* data for current context recommendations
     store_trends_filtered = calculate_store_trends(df_filtered, trend_window)
 
     for store_id in all_store_ids:
@@ -639,9 +781,9 @@ def generate_recommendations(df_filtered: pd.DataFrame, store_stats: pd.DataFram
         if store_data_filtered.empty: continue
 
         avg_eng = safe_mean(store_data_filtered[COL_ENGAGED_PCT])
-        trend = store_trends_filtered.get(store_id, "Stable") # Get trend for this store
+        trend = store_trends_filtered.get(store_id, "Stable") # Get trend for this store in filtered period
 
-        # Get category from pre-calculated stats
+        # Get category from pre-calculated stats (based on same filtered period)
         category = CAT_UNCATEGORIZED
         action_plan = PERFORMANCE_CATEGORIES[CAT_UNCATEGORIZED]['action']
         if not store_stats.empty and COL_STORE_ID in store_stats.columns:
@@ -655,27 +797,29 @@ def generate_recommendations(df_filtered: pd.DataFrame, store_stats: pd.DataFram
         # Base recommendation on category (action plan)
         rec = action_plan if action_plan != 'N/A' else "Review performance data." # Default recommendation
 
-        # Refine recommendation based on *current* trend in filtered data
+        # --- Refine recommendation based on *current* trend vs category ---
+        # If a star performer is currently declining
         if category == CAT_STAR and trend in ["Downward", "Strong Downward"]:
-             rec = "High performer, but recent trend is down. Investigate potential causes."
+             rec = f"{action_plan}. However, recent trend is concerning ({trend}). Investigate potential causes."
+        # If an intervention store is currently improving
         elif category == CAT_INTERVENTION and trend in ["Upward", "Strong Upward"]:
-             rec = "Showing recent improvement! Continue efforts and monitor closely."
+             rec = f"Showing recent improvement ({trend})! Reinforce positive actions. {action_plan}"
+        # If a stabilize store is no longer declining
         elif category == CAT_STABILIZE and trend not in ["Downward", "Strong Downward"]:
-             rec = "Stabilization efforts may be working. Maintain focus on consistency."
+             rec = f"Stabilization efforts may be working (recent trend: {trend}). Maintain focus on consistency. {action_plan}"
+        # If an improving store is no longer improving
         elif category == CAT_IMPROVING and trend not in ["Upward", "Strong Upward"]:
-             rec = "Improvement seems stalled. Re-evaluate strategies or seek support."
+             rec = f"Improvement seems stalled (recent trend: {trend}). Re-evaluate strategies or seek support. {action_plan}"
 
 
-        # Append anomaly note if significant anomaly exists for this store in the filtered period
+        # --- Append anomaly note if significant anomaly exists for this store ---
         store_anoms = anomalies_df[anomalies_df[COL_STORE_ID] == store_id] if not anomalies_df.empty else pd.DataFrame()
         if not store_anoms.empty:
-            # Check if the anomaly week is within the filtered weeks
-            filtered_weeks = df_filtered[COL_WEEK].unique()
-            relevant_anoms = store_anoms[store_anoms[COL_WEEK].isin(filtered_weeks)]
-            if not relevant_anoms.empty:
-                biggest_relevant = relevant_anoms.iloc[0] # Already sorted by Z-score
-                change_type = 'positive spike' if biggest_relevant[COL_CHANGE_PCT_PTS] > 0 else 'negative drop'
-                rec += f" Note: Investigate significant {change_type} in Week {int(biggest_relevant[COL_WEEK])} (Z={biggest_relevant[COL_Z_SCORE]:.1f})."
+            # Get the most significant anomaly for this store (already sorted)
+            biggest_anomaly = store_anoms.iloc[0]
+            change_type = 'positive spike' if biggest_anomaly[COL_CHANGE_PCT_PTS] > 0 else 'negative drop'
+            rec += f" **Anomaly Alert:** Investigate significant {change_type} in Week {int(biggest_anomaly[COL_WEEK])} (Z={biggest_anomaly[COL_Z_SCORE]:.1f})."
+
 
         recommendations.append({
             COL_STORE_ID: store_id,
@@ -685,61 +829,76 @@ def generate_recommendations(df_filtered: pd.DataFrame, store_stats: pd.DataFram
             'Recommendation': rec
         })
 
-    return pd.DataFrame(recommendations)
+    rec_df = pd.DataFrame(recommendations)
+
+    # Ensure all expected output columns exist
+    for col in output_cols:
+        if col not in rec_df.columns:
+            rec_df[col] = pd.NA
+
+    return rec_df[output_cols]
 
 
 def calculate_recent_performance_trends(df: pd.DataFrame, trend_window: int, momentum_threshold: float) -> pd.DataFrame:
-    """Analyzes short-term trends (improving, stable, declining) over a recent window."""
+    """Analyzes short-term trends (improving, stable, declining) over a recent window within the provided DataFrame."""
     directions = []
+    output_cols = ['store', 'direction', 'strength', 'indicator', 'start_value', 'current_value', 'total_change', 'color', 'weeks', 'slope']
     required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
+
     if df.empty or not all(col in df.columns for col in required_cols):
-        return pd.DataFrame()
+        return pd.DataFrame(columns=output_cols)
 
     for store_id, data in df.groupby(COL_STORE_ID):
+        # Ensure enough data points for the specified window
         if len(data) < trend_window: continue
 
+        # Get the most recent 'trend_window' weeks for this store
         recent = data.sort_values(COL_WEEK).tail(trend_window)
         vals = recent[COL_ENGAGED_PCT].values
+
         # Ensure no NaNs in the values used for calculation
         if pd.isna(vals).any(): continue
+        # Ensure we have at least 2 values for comparison
+        if len(vals) < 2: continue
 
-        # Simple comparison of first vs second half mean (or start vs end for small windows)
+        # --- Calculate Change Metric ---
+        # Compare mean of first half vs second half for trend direction sensitivity
         if trend_window <= 3:
-            # Check if enough values exist
-            if len(vals) < 2: continue
+            # For short windows, compare start vs end
             first_half_mean = vals[0]
             second_half_mean = vals[-1]
         else:
             split_point = trend_window // 2
-            # Ensure enough values for split means
-            if len(vals) < trend_window: continue # Should be handled by outer check, but safety first
             first_half_mean = vals[:split_point].mean()
             second_half_mean = vals[-split_point:].mean()
 
         change = second_half_mean - first_half_mean
-        start_val = recent.iloc[0][COL_ENGAGED_PCT]
-        current_val = recent.iloc[-1][COL_ENGAGED_PCT]
-        total_change = current_val - start_val
-        slope = calculate_trend_slope(recent, trend_window) # Use existing slope calculation
 
-        # Classify direction based on the change between halves
+        # --- Calculate Other Metrics ---
+        start_val = vals[0]
+        current_val = vals[-1]
+        total_change = current_val - start_val
+        # Use existing slope calculation for consistency
+        slope = calculate_trend_slope(recent, trend_window)
+
+        # --- Classify Direction & Strength ---
         if abs(change) < momentum_threshold:
             direction, strength, color = "Stable", "Holding Steady", PERFORMANCE_CATEGORIES.get(CAT_STABILIZE, {}).get('color', '#757575') # Use neutral color
         elif change > 0:
             direction = "Improving"
             strength = "Strong Improvement" if change > 2 * momentum_threshold else "Gradual Improvement"
             color = PERFORMANCE_CATEGORIES.get(CAT_IMPROVING, {}).get('color', '#1976D2') # Use improving color
-        else:
+        else: # change < 0
             direction = "Declining"
             strength = "Significant Decline" if change < -2 * momentum_threshold else "Gradual Decline"
             color = PERFORMANCE_CATEGORIES.get(CAT_INTERVENTION, {}).get('color', '#C62828') # Use declining color
 
-        # Choose indicator based on direction and strength
+        # --- Choose Indicator ---
         if direction == "Improving":
             indicator = "🔼" if "Strong" in strength else "↗️"
         elif direction == "Declining":
             indicator = "🔽" if "Significant" in strength else "↘️"
-        else:
+        else: # Stable
             indicator = "➡️"
 
         directions.append({
@@ -755,20 +914,27 @@ def calculate_recent_performance_trends(df: pd.DataFrame, trend_window: int, mom
             'slope': slope
         })
 
-    return pd.DataFrame(directions)
+    dir_df = pd.DataFrame(directions)
+    # Ensure all output columns exist
+    for col in output_cols:
+        if col not in dir_df.columns:
+             dir_df[col] = pd.NA
+
+    return dir_df[output_cols]
 
 
 # --- Charting Functions ---
 
-def create_engagement_trend_chart(df_plot: pd.DataFrame, dist_trend: pd.DataFrame, df_comp_plot: Optional[pd.DataFrame], dist_trend_comp: Optional[pd.DataFrame], show_ma: bool, view_option: str, stores_to_show: Optional[List[str]] = None) -> Optional[alt.LayerChart]:
+def create_engagement_trend_chart(df_plot: pd.DataFrame, dist_trend: Optional[pd.DataFrame], df_comp_plot: Optional[pd.DataFrame], dist_trend_comp: Optional[pd.DataFrame], show_ma: bool, view_option: str, stores_to_show: Optional[List[str]] = None) -> Optional[alt.LayerChart]:
     """Creates the layered Altair chart for engagement trends."""
-    if df_plot.empty or COL_WEEK not in df_plot.columns or COL_ENGAGED_PCT not in df_plot.columns:
+    required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
+    if df_plot.empty or not all(col in df_plot.columns for col in required_cols):
         return None
 
     layers = []
     color_scale = alt.Scale(scheme='category10') # Consistent color scheme
 
-    # Tooltip definition
+    # --- Tooltip Definitions ---
     tooltip_base = [
         alt.Tooltip(COL_STORE_ID, title='Store'),
         alt.Tooltip(COL_WEEK, title='Week', type='ordinal'), # Treat week as ordinal for tooltip
@@ -777,111 +943,117 @@ def create_engagement_trend_chart(df_plot: pd.DataFrame, dist_trend: pd.DataFram
     tooltip_ma = [
         alt.Tooltip(COL_STORE_ID, title='Store'),
         alt.Tooltip(COL_WEEK, title='Week', type='ordinal'),
-        alt.Tooltip(COL_MA_4W, format='.2f', title='4W MA')
-    ]
+        alt.Tooltip(COL_MA_4W, format='.2f', title=f'{DEFAULT_TREND_WINDOW}W MA')
+    ] if COL_MA_4W in df_plot.columns else tooltip_base # Fallback if MA not calculated
+
     tooltip_dist = [
         alt.Tooltip(COL_WEEK, title='Week', type='ordinal'),
         alt.Tooltip('Average Engagement %', format='.2f', title='District Avg')
-    ]
+    ] if dist_trend is not None and 'Average Engagement %' in dist_trend.columns else [alt.Tooltip(COL_WEEK, title='Week', type='ordinal')]
+
     tooltip_dist_ma = [
         alt.Tooltip(COL_WEEK, title='Week', type='ordinal'),
-        alt.Tooltip(COL_MA_4W, format='.2f', title='District 4W MA')
-    ]
+        alt.Tooltip(COL_MA_4W, format='.2f', title=f'District {DEFAULT_TREND_WINDOW}W MA')
+    ] if dist_trend is not None and COL_MA_4W in dist_trend.columns else tooltip_dist
+
     tooltip_dist_comp = [
          alt.Tooltip(COL_WEEK, title='Week', type='ordinal'),
          alt.Tooltip('Average Engagement %', format='.2f', title='Comp. Period Avg')
-    ]
+    ] if dist_trend_comp is not None and 'Average Engagement %' in dist_trend_comp.columns else [alt.Tooltip(COL_WEEK, title='Week', type='ordinal')]
+
     tooltip_dist_comp_ma = [
          alt.Tooltip(COL_WEEK, title='Week', type='ordinal'),
-         alt.Tooltip(COL_MA_4W, format='.2f', title='Comp. Period 4W MA')
-    ]
+         alt.Tooltip(COL_MA_4W, format='.2f', title=f'Comp. Period {DEFAULT_TREND_WINDOW}W MA')
+    ] if dist_trend_comp is not None and COL_MA_4W in dist_trend_comp.columns else tooltip_dist_comp
 
 
     # --- Store Lines ---
+    plot_stores = True
+    data_for_stores = df_plot.copy()
+    # Handle Custom Selection mode
     if view_option == "Custom Selection":
         if stores_to_show:
-            data_sel = df_plot[df_plot[COL_STORE_ID].isin(stores_to_show)]
-            if not data_sel.empty:
-                # Main line
-                layers.append(alt.Chart(data_sel).mark_line(strokeWidth=3).encode(
-                    x=alt.X(f'{COL_WEEK}:O', title='Week'), # Treat week as ordinal on axis
-                    y=alt.Y(f'{COL_ENGAGED_PCT}:Q', title='Engaged Transaction %'),
-                    color=alt.Color(f'{COL_STORE_ID}:N', scale=color_scale, title="Store"),
-                    tooltip=tooltip_base
-                ))
-                # Points on line
-                layers.append(alt.Chart(data_sel).mark_point(filled=True, size=80).encode(
-                    x=f'{COL_WEEK}:O', y=f'{COL_ENGAGED_PCT}:Q',
-                    color=alt.Color(f'{COL_STORE_ID}:N', scale=color_scale),
-                    tooltip=tooltip_base
-                ))
-                # Moving Average line
-                if show_ma and COL_MA_4W in data_sel.columns and not data_sel[COL_MA_4W].isna().all():
-                    layers.append(alt.Chart(data_sel).mark_line(strokeDash=[2,2], strokeWidth=2).encode(
-                        x=f'{COL_WEEK}:O', y=alt.Y(f'{COL_MA_4W}:Q', title='4W MA'),
-                        color=alt.Color(f'{COL_STORE_ID}:N', scale=color_scale),
-                        tooltip=tooltip_ma
-                    ))
+            data_for_stores = data_for_stores[data_for_stores[COL_STORE_ID].isin(stores_to_show)]
+            if data_for_stores.empty:
+                plot_stores = False # Don't plot if filter results in empty data
         else:
-            # If custom selection is chosen but no stores are selected, don't add store lines
-            pass
-    else: # All Stores or Recent Trends view
-        # Interactive legend selection
-        store_sel = alt.selection_point(fields=[COL_STORE_ID], bind='legend')
+            plot_stores = False # Don't plot if no stores selected in this mode
 
-        # Main store lines (opacity changes on selection)
-        store_line = alt.Chart(df_plot).mark_line(strokeWidth=1.5).encode(
-            x=alt.X(f'{COL_WEEK}:O', title='Week'),
+    # Add store lines if applicable
+    if plot_stores and not data_for_stores.empty:
+        # Define base chart for stores
+        base_chart_stores = alt.Chart(data_for_stores).encode(
+             x=alt.X(f'{COL_WEEK}:O', title='Week'), # Treat week as ordinal on axis
+             color=alt.Color(f'{COL_STORE_ID}:N', scale=color_scale, title="Store")
+        )
+
+        # Add selection for non-custom modes
+        store_sel = alt.selection_point(fields=[COL_STORE_ID], bind='legend') if view_option != "Custom Selection" else None
+        opacity = alt.condition(store_sel, alt.value(1), alt.value(0.2)) if store_sel else alt.value(1)
+        stroke_width = alt.condition(store_sel, alt.value(3), alt.value(1.5)) if store_sel else alt.value(3 if view_option == "Custom Selection" else 1.5)
+
+        # Main line
+        line_chart = base_chart_stores.mark_line().encode(
             y=alt.Y(f'{COL_ENGAGED_PCT}:Q', title='Engaged Transaction %'),
-            color=alt.Color(f'{COL_STORE_ID}:N', scale=color_scale, title="Store"),
-            opacity=alt.condition(store_sel, alt.value(1), alt.value(0.2)),
-            strokeWidth=alt.condition(store_sel, alt.value(3), alt.value(1.5)),
+            opacity=opacity,
+            strokeWidth=stroke_width,
             tooltip=tooltip_base
-        ).add_params(store_sel)
-        layers.append(store_line)
+        )
+        if store_sel: line_chart = line_chart.add_params(store_sel)
+        layers.append(line_chart)
 
-        # Moving average lines (opacity changes on selection)
-        if show_ma and COL_MA_4W in df_plot.columns and not df_plot[COL_MA_4W].isna().all():
-            ma_line = alt.Chart(df_plot).mark_line(strokeDash=[2,2], strokeWidth=1.5).encode(
-                x=f'{COL_WEEK}:O', y=alt.Y(f'{COL_MA_4W}:Q', title='4W MA'),
-                color=alt.Color(f'{COL_STORE_ID}:N', scale=color_scale),
-                opacity=alt.condition(store_sel, alt.value(0.8), alt.value(0.1)),
+        # Points (only for custom selection for clarity)
+        if view_option == "Custom Selection":
+            layers.append(base_chart_stores.mark_point(filled=True, size=80).encode(
+                y=f'{COL_ENGAGED_PCT}:Q',
+                tooltip=tooltip_base
+            ))
+
+        # Moving Average line
+        if show_ma and COL_MA_4W in data_for_stores.columns and not data_for_stores[COL_MA_4W].isna().all():
+            ma_opacity = alt.condition(store_sel, alt.value(0.8), alt.value(0.1)) if store_sel else alt.value(1)
+            ma_chart = base_chart_stores.mark_line(strokeDash=[2,2]).encode(
+                y=alt.Y(f'{COL_MA_4W}:Q'), # Title comes from axis if shared
+                opacity=ma_opacity,
+                strokeWidth=alt.value(2 if view_option == "Custom Selection" else 1.5),
                 tooltip=tooltip_ma
-            ).add_params(store_sel) # Link opacity to the same legend selection
-            layers.append(ma_line)
+            )
+            if store_sel: ma_chart = ma_chart.add_params(store_sel) # Link opacity
+            layers.append(ma_chart)
+
 
     # --- District Average Lines ---
     if dist_trend is not None and not dist_trend.empty:
+        base_chart_dist = alt.Chart(dist_trend).encode(x=alt.X(f'{COL_WEEK}:O', title='Week'))
         # District Average
-        layers.append(alt.Chart(dist_trend).mark_line(color='black', strokeDash=[4,2], size=3).encode(
-            x=alt.X(f'{COL_WEEK}:O', title='Week'),
+        layers.append(base_chart_dist.mark_line(color='black', strokeDash=[4,2], size=3).encode(
             y=alt.Y('Average Engagement %:Q', title='Engaged Transaction %'), # Use shared Y axis title
             tooltip=tooltip_dist
-        ).properties(title="District Average")) # Add title for clarity in potential combined legend
+        ).properties(title="District Average"))
 
         # District Moving Average
         if show_ma and COL_MA_4W in dist_trend.columns and not dist_trend[COL_MA_4W].isna().all():
-            layers.append(alt.Chart(dist_trend).mark_line(color='black', strokeDash=[1,1], size=2, opacity=0.7).encode(
-                x=f'{COL_WEEK}:O', y=f'{COL_MA_4W}:Q',
+            layers.append(base_chart_dist.mark_line(color='black', strokeDash=[1,1], size=2, opacity=0.7).encode(
+                y=f'{COL_MA_4W}:Q',
                 tooltip=tooltip_dist_ma
-            ).properties(title="District 4W MA"))
+            ).properties(title=f"District {DEFAULT_TREND_WINDOW}W MA"))
+
 
     # --- Comparison Period District Lines ---
-    # Check df_comp_plot as well, as dist_trend_comp might be calculated on empty df
-    if dist_trend_comp is not None and not dist_trend_comp.empty and df_comp_plot is not None and not df_comp_plot.empty:
+    if dist_trend_comp is not None and not dist_trend_comp.empty:
+        base_chart_dist_comp = alt.Chart(dist_trend_comp).encode(x=alt.X(f'{COL_WEEK}:O', title='Week'))
         # Comparison District Average
-        layers.append(alt.Chart(dist_trend_comp).mark_line(color='#555555', strokeDash=[4,2], size=2).encode(
-            x=alt.X(f'{COL_WEEK}:O', title='Week'),
+        layers.append(base_chart_dist_comp.mark_line(color='#555555', strokeDash=[4,2], size=2).encode(
             y=alt.Y('Average Engagement %:Q'), # Shared Y axis
             tooltip=tooltip_dist_comp
         ).properties(title="Comparison Period Avg"))
 
         # Comparison District Moving Average
         if show_ma and COL_MA_4W in dist_trend_comp.columns and not dist_trend_comp[COL_MA_4W].isna().all():
-            layers.append(alt.Chart(dist_trend_comp).mark_line(color='#555555', strokeDash=[1,1], size=1.5, opacity=0.7).encode(
-                x=f'{COL_WEEK}:O', y=f'{COL_MA_4W}:Q',
+            layers.append(base_chart_dist_comp.mark_line(color='#555555', strokeDash=[1,1], size=1.5, opacity=0.7).encode(
+                y=f'{COL_MA_4W}:Q',
                 tooltip=tooltip_dist_comp_ma
-            ).properties(title="Comparison Period 4W MA"))
+            ).properties(title=f"Comparison Period {DEFAULT_TREND_WINDOW}W MA"))
 
 
     if not layers:
@@ -903,20 +1075,21 @@ def create_heatmap(df_heatmap: pd.DataFrame, sort_method: str, color_scheme: str
     if df_heatmap.empty or not all(col in df_heatmap.columns for col in required_cols) or df_heatmap[COL_ENGAGED_PCT].dropna().empty:
         return None
 
-
-    # Rename for Altair field name validity if needed (Store # is fine)
+    # Rename for Altair field name validity if needed (Store # is fine, but consistency)
     df_heatmap = df_heatmap.rename(columns={COL_STORE_ID: 'StoreID', COL_ENGAGED_PCT: 'EngagedPct'})
 
     # Determine store sort order
     if sort_method == "Average Engagement":
+        # Sort by average engagement over the period shown in the heatmap
         store_order = df_heatmap.groupby('StoreID')['EngagedPct'].mean().sort_values(ascending=False).index.tolist()
-    else: # Recent Performance
+    else: # Recent Performance (Sort by performance in the last week shown in the heatmap)
         most_recent_week = safe_max(df_heatmap[COL_WEEK])
         if most_recent_week is None:
              store_order = sorted(df_heatmap['StoreID'].unique()) # Fallback sort
         else:
              # Sort by performance in the most recent week available in the heatmap data
-             store_order = df_heatmap[df_heatmap[COL_WEEK] == most_recent_week].sort_values('EngagedPct', ascending=False)['StoreID'].tolist()
+             last_week_data = df_heatmap[df_heatmap[COL_WEEK] == most_recent_week]
+             store_order = last_week_data.sort_values('EngagedPct', ascending=False)['StoreID'].tolist()
              # Add stores present in heatmap but not in the last week (e.g., if they stopped reporting), sorted alphabetically
              stores_in_last_week = set(store_order)
              all_stores_in_heatmap = set(df_heatmap['StoreID'].unique())
@@ -925,18 +1098,21 @@ def create_heatmap(df_heatmap: pd.DataFrame, sort_method: str, color_scheme: str
 
 
     num_stores = len(store_order)
-    chart_height = max(CHART_HEIGHT_SHORT, HEATMAP_ROW_HEIGHT * num_stores) # Dynamic height
+    chart_height = max(CHART_HEIGHT_SHORT, HEATMAP_ROW_HEIGHT * num_stores) # Dynamic height based on number of stores
 
-    heatmap_chart = alt.Chart(df_heatmap).mark_rect().encode(
-        x=alt.X(f'{COL_WEEK}:O', title='Week'),
-        y=alt.Y('StoreID:O', title='Store', sort=store_order),
-        color=alt.Color('EngagedPct:Q', title='Engaged %', scale=alt.Scale(scheme=color_scheme), legend=alt.Legend(orient='right')),
-        tooltip=['StoreID', alt.Tooltip(f'{COL_WEEK}:O', title='Week'), alt.Tooltip('EngagedPct:Q', format='.2f', title='Engaged %')]
-    ).properties(
-        height=chart_height
-    )
-
-    return heatmap_chart
+    try:
+        heatmap_chart = alt.Chart(df_heatmap).mark_rect().encode(
+            x=alt.X(f'{COL_WEEK}:O', title='Week', axis=alt.Axis(labelAngle=0)), # Keep week labels horizontal
+            y=alt.Y('StoreID:O', title='Store', sort=store_order),
+            color=alt.Color('EngagedPct:Q', title='Engaged %', scale=alt.Scale(scheme=color_scheme), legend=alt.Legend(orient='right')),
+            tooltip=['StoreID', alt.Tooltip(f'{COL_WEEK}:O', title='Week'), alt.Tooltip('EngagedPct:Q', format='.2f', title='Engaged %')]
+        ).properties(
+            height=chart_height
+        )
+        return heatmap_chart
+    except Exception as e:
+        st.error(f"Error creating heatmap: {e}")
+        return None
 
 
 def create_comparison_bar_chart(comp_data: pd.DataFrame, district_avg: Optional[float], title: str) -> Optional[alt.LayerChart]:
@@ -948,8 +1124,9 @@ def create_comparison_bar_chart(comp_data: pd.DataFrame, district_avg: Optional[
     num_stores = len(comp_data[COL_STORE_ID].unique())
     chart_height = max(CHART_HEIGHT_SHORT, COMPARISON_BAR_HEIGHT * num_stores) # Dynamic height
 
+    # Base bar chart
     bar_chart = alt.Chart(comp_data).mark_bar().encode(
-        y=alt.Y(f'{COL_STORE_ID}:N', title='Store', sort='-x'), # Sort descending by engagement
+        y=alt.Y(f'{COL_STORE_ID}:N', title='Store', sort='-x'), # Sort descending by engagement value on X-axis
         x=alt.X(f'{COL_ENGAGED_PCT}:Q', title='Engaged Transaction %'),
         color=alt.Color(f'{COL_ENGAGED_PCT}:Q', scale=alt.Scale(scheme=DEFAULT_COLOR_SCHEME), legend=None), # Simple color scale, hide legend
         tooltip=[alt.Tooltip(COL_STORE_ID, title='Store'), alt.Tooltip(f'{COL_ENGAGED_PCT}:Q', format='.2f', title='Engaged %')]
@@ -964,8 +1141,9 @@ def create_comparison_bar_chart(comp_data: pd.DataFrame, district_avg: Optional[
             color='red', strokeDash=[4, 4], size=2
         ).encode(
             x='avg:Q',
-            tooltip=[alt.Tooltip('avg:Q', title='District Average', format='.2f')]
+            tooltip=[alt.Tooltip('avg:Q', title='Average (Selected Stores)', format='.2f')] # Clarify average scope
         )
+        # Layer the rule over the bars
         return alt.layer(bar_chart, avg_rule)
     else:
         # Return only the bar chart if average is not available
@@ -973,15 +1151,18 @@ def create_comparison_bar_chart(comp_data: pd.DataFrame, district_avg: Optional[
 
 
 def create_relative_comparison_chart(comp_data: pd.DataFrame, district_avg: Optional[float]) -> Optional[alt.LayerChart]:
-    """Creates the bar chart showing performance relative to district average."""
+    """Creates the bar chart showing performance relative to the average for selected stores."""
     required_cols = [COL_STORE_ID, COL_ENGAGED_PCT]
-    if comp_data.empty or not all(col in comp_data.columns for col in required_cols) or district_avg is None or pd.isna(district_avg):
-         st.caption("_Relative comparison requires a valid average._")
+    if comp_data.empty or not all(col in comp_data.columns for col in required_cols):
+        return None
+    if district_avg is None or pd.isna(district_avg):
+         st.caption("_Relative comparison requires a valid average for the selected stores/period._")
          return None # Cannot calculate relative difference without a valid average
 
 
+    # Calculate difference and percentage difference
     comp_data['Difference'] = comp_data[COL_ENGAGED_PCT] - district_avg
-    # Avoid division by zero if average is zero
+    # Avoid division by zero if average is zero, assign 0% difference
     comp_data['Percentage'] = (comp_data['Difference'] / district_avg * 100) if district_avg != 0 else 0.0
 
     num_stores = len(comp_data[COL_STORE_ID].unique())
@@ -994,6 +1175,10 @@ def create_relative_comparison_chart(comp_data: pd.DataFrame, district_avg: Opti
     # Handle cases where min/max might be None or NaN
     min_perc = min_perc if pd.notna(min_perc) else 0
     max_perc = max_perc if pd.notna(max_perc) else 0
+    # Ensure range has some width if min == max
+    if min_perc == max_perc:
+        min_perc -= 1
+        max_perc += 1
 
     # Ensure 0 is included in the domain for the midpoint color, handle cases where all values are same sign
     domain = sorted(list(set([min_perc, 0, max_perc])))
@@ -1003,16 +1188,19 @@ def create_relative_comparison_chart(comp_data: pd.DataFrame, district_avg: Opti
              domain.insert(domain.index(0), 0)
         else: # e.g. [10, 50] -> [10, (10+50)/2, 50] - add midpoint
              domain.insert(1, (domain[0]+domain[1])/2)
+    elif len(domain) == 1: # e.g., all are 0
+         domain = [domain[0] - 1, domain[0], domain[0] + 1]
 
 
     # Define color range (Red -> Gray/Neutral -> Green)
     color_range = [PERFORMANCE_CATEGORIES[CAT_INTERVENTION]['color'], '#BBBBBB', PERFORMANCE_CATEGORIES[CAT_STAR]['color']]
 
+    # Base chart for relative difference
     diff_chart = alt.Chart(comp_data).mark_bar().encode(
         # Keep sort order consistent with the absolute chart (by Engaged %)
         y=alt.Y(f'{COL_STORE_ID}:N', title='Store', sort=alt.EncodingSortField(field=COL_ENGAGED_PCT, order='descending')),
         x=alt.X('Percentage:Q', title='% Difference from Average'),
-        color=alt.Color('Percentage:Q', scale=alt.Scale(domain=domain, range=color_range, type='linear'), legend=None),
+        color=alt.Color('Percentage:Q', scale=alt.Scale(domain=domain, range=color_range, type='linear'), legend=None), # Hide legend
         tooltip=[
             alt.Tooltip(COL_STORE_ID, title='Store'),
             alt.Tooltip(f'{COL_ENGAGED_PCT}:Q', format='.2f', title='Engaged %'),
@@ -1020,10 +1208,10 @@ def create_relative_comparison_chart(comp_data: pd.DataFrame, district_avg: Opti
         ]
     ).properties(
         height=chart_height,
-        title="Performance Relative to Average"
+        title="Performance Relative to Average (Selected Stores)"
     )
 
-    # Add zero line
+    # Add zero line for reference
     center_rule = alt.Chart(pd.DataFrame({'center': [0]})).mark_rule(color='black').encode(x='center:Q')
 
     return alt.layer(diff_chart, center_rule)
@@ -1035,8 +1223,8 @@ def create_rank_trend_chart(rank_data: pd.DataFrame) -> Optional[alt.Chart]:
     if rank_data.empty or not all(col in rank_data.columns for col in required_cols):
         return None
 
-    # Ensure rank is numeric for plotting scale
-    rank_data = rank_data.dropna(subset=[COL_RANK])
+    # Ensure rank is numeric for plotting scale, drop rows where rank is missing
+    rank_data = rank_data.dropna(subset=[COL_RANK]).copy() # Use copy to avoid SettingWithCopyWarning
     if rank_data.empty: return None
     rank_data[COL_RANK] = rank_data[COL_RANK].astype(int)
 
@@ -1046,16 +1234,22 @@ def create_rank_trend_chart(rank_data: pd.DataFrame) -> Optional[alt.Chart]:
 
     # Handle case where min/max are None or equal
     if min_rank is None or max_rank is None:
-        rank_domain = [10, 0] # Default range
+        rank_domain = [10, 0] # Default range if no ranks found
     elif min_rank == max_rank:
-         rank_domain = [max_rank + 1, min_rank - 1] # Ensure some space if only one rank value
+         # Add padding if only one rank value exists
+         rank_domain = [max_rank + 1, min_rank - 1]
     else:
-         rank_domain = [max_rank + 1, min_rank - 1] # Add padding
+         # Add padding to min/max for better axis display
+         rank_domain = [max_rank + 1, min_rank - 1]
+    # Ensure domain minimum is not negative
+    if rank_domain[1] < 0: rank_domain[1] = 0
 
 
+    # Base chart for rank trends
     rank_chart_base = alt.Chart(rank_data).mark_line(point=True).encode(
         x=alt.X(f'{COL_WEEK}:O', title='Week'),
-        y=alt.Y(f'{COL_RANK}:Q', title='Rank', scale=alt.Scale(domain=rank_domain, zero=False)), # Reverse scale, don't force include zero
+        # Use reversed scale domain, ensure zero is not included unless rank is actually 0
+        y=alt.Y(f'{COL_RANK}:Q', title='Rank', scale=alt.Scale(domain=rank_domain, zero=False)),
         color=alt.Color(f'{COL_STORE_ID}:N', scale=alt.Scale(scheme='category10'), title="Store"),
         tooltip=[
             alt.Tooltip(COL_STORE_ID, title='Store'),
@@ -1072,26 +1266,30 @@ def create_rank_trend_chart(rank_data: pd.DataFrame) -> Optional[alt.Chart]:
     rank_chart_interactive = rank_chart_base.add_params(rank_sel).encode(
         opacity=alt.condition(rank_sel, alt.value(1), alt.value(0.2)),
         strokeWidth=alt.condition(rank_sel, alt.value(3), alt.value(1.5))
-    ).interactive()
+    ).interactive() # Add interactive zooming/panning
 
     return rank_chart_interactive
 
 def create_recent_trend_bar_chart(dir_df: pd.DataFrame) -> Optional[alt.LayerChart]:
     """Creates the bar chart showing total change for recent trends."""
-    if dir_df.empty or 'total_change' not in dir_df.columns or 'store' not in dir_df.columns or 'direction' not in dir_df.columns:
+    required_cols = ['store', 'total_change', 'direction', 'weeks']
+    if dir_df.empty or not all(col in dir_df.columns for col in required_cols):
         return None
 
     num_stores = len(dir_df['store'].unique())
     chart_height = max(CHART_HEIGHT_SHORT, COMPARISON_BAR_HEIGHT * num_stores)
-    # Get the actual window size used from the data
-    trend_window_used = dir_df["weeks"].iloc[0] if not dir_df.empty and "weeks" in dir_df.columns else RECENT_TRENDS_WINDOW
+    # Get the actual window size used from the data (should be consistent)
+    trend_window_used = dir_df["weeks"].iloc[0] if not dir_df.empty else RECENT_TRENDS_WINDOW
 
 
+    # Base chart for total change bars
     change_chart = alt.Chart(dir_df).mark_bar().encode(
         x=alt.X('total_change:Q', title=f'Change in Engagement % (Last {trend_window_used} Weeks)'),
+        # Sort bars by the total change value
         y=alt.Y('store:N', sort=alt.EncodingSortField(field='total_change', order='descending'), title='Store'),
         color=alt.Color('direction:N',
                         scale=alt.Scale(domain=['Improving', 'Stable', 'Declining'],
+                                        # Use consistent category colors where applicable
                                         range=[PERFORMANCE_CATEGORIES.get(CAT_IMPROVING, {}).get('color', '#1976D2'),
                                                '#757575', # Use a distinct gray for stable
                                                PERFORMANCE_CATEGORIES.get(CAT_INTERVENTION, {}).get('color', '#C62828')]),
@@ -1104,23 +1302,24 @@ def create_recent_trend_bar_chart(dir_df: pd.DataFrame) -> Optional[alt.LayerCha
                  alt.Tooltip('total_change:Q', format='+.2f', title='Total Change')]
     ).properties(
         height=chart_height,
-        title="Recent Performance Change"
+        title="Recent Performance Change (within Heatmap Range)"
     )
 
-    # Add zero line for reference
-    zero_line = alt.Chart(pd.DataFrame({'x': [0]})).mark_rule(color='white', strokeDash=[3, 3]).encode(x='x:Q')
+    # Add zero line for reference, make it visible against potentially dark bars
+    zero_line = alt.Chart(pd.DataFrame({'x': [0]})).mark_rule(color='white', strokeDash=[3, 3], opacity=0.7).encode(x='x:Q')
 
     return alt.layer(change_chart, zero_line)
 
 
 # --- UI Display Functions ---
 
-def display_sidebar(df: Optional[pd.DataFrame]) -> Tuple[Any, Any, str, str, List[str], float, bool, int]:
-    """Creates and manages the Streamlit sidebar elements."""
-    st.sidebar.header("Data Input")
-    data_file = st.sidebar.file_uploader("Upload engagement data (Excel or CSV)", type=['csv', 'xlsx'], key="data_uploader")
-    comp_file = st.sidebar.file_uploader("Optional: Upload comparison data (prior period)", type=['csv', 'xlsx'], key="comp_uploader")
-
+def display_sidebar(
+    df: Optional[pd.DataFrame],
+    data_file_exists: bool # Flag to indicate if primary file is already uploaded
+) -> Tuple[str, str, List[str], float, bool, int]:
+    """Creates and manages the Streamlit sidebar elements for filters and settings.
+       File uploaders are handled outside this function.
+    """
     # Initialize filter defaults
     quarter_choice = "All"
     week_choice = "All"
@@ -1130,115 +1329,171 @@ def display_sidebar(df: Optional[pd.DataFrame]) -> Tuple[Any, Any, str, str, Lis
     trend_analysis_weeks = DEFAULT_TREND_WINDOW
     store_list = [] # Initialize store list
 
-    if df is not None and not df.empty:
+    # --- Display Filters and Settings only if data is loaded ---
+    if data_file_exists and df is not None and not df.empty:
         st.sidebar.header("Filters")
 
-        # Get available stores
+        # Get available stores from the loaded data
         if COL_STORE_ID in df.columns:
              store_list = sorted(df[COL_STORE_ID].unique().tolist())
 
-        # Quarter Filter
+        # --- Quarter Filter ---
         if COL_QUARTER in df.columns:
             quarters = sorted(df[COL_QUARTER].dropna().unique().tolist())
             quarter_options = ["All"] + [f"Q{int(q)}" for q in quarters]
-            quarter_choice = st.sidebar.selectbox("Select Quarter", quarter_options, index=0, key="quarter_filter")
+            # Use session state to remember selection if possible, otherwise default to 0
+            idx = st.session_state.get("quarter_filter_idx", 0)
+            if idx >= len(quarter_options): idx = 0 # Reset if index out of bounds
+            quarter_choice = st.sidebar.selectbox(
+                "Select Quarter", quarter_options, index=idx, key="quarter_filter",
+                on_change=lambda: st.session_state.update(quarter_filter_idx=quarter_options.index(st.session_state.quarter_filter))
+                )
         else:
             st.sidebar.markdown("_Quarter information not available._")
 
 
-        # Week Filter (dependent on Quarter selection)
+        # --- Week Filter (dependent on Quarter selection) ---
         if COL_WEEK in df.columns:
             # Determine available weeks based on quarter selection
-            if quarter_choice != "All":
+            weeks_in_period = df.copy()
+            if quarter_choice != "All" and COL_QUARTER in weeks_in_period.columns:
                 try:
                     q_num = int(quarter_choice.replace('Q', ''))
-                    # Ensure Quarter column exists before filtering
-                    if COL_QUARTER in df.columns:
-                         weeks_in_quarter = sorted(df[df[COL_QUARTER] == q_num][COL_WEEK].unique())
-                    else:
-                         weeks_in_quarter = sorted(df[COL_WEEK].unique()) # Fallback if quarter column missing
+                    weeks_in_period = weeks_in_period[weeks_in_period[COL_QUARTER] == q_num]
                 except (ValueError, KeyError):
-                    weeks_in_quarter = sorted(df[COL_WEEK].unique()) # Fallback on error
-            else:
-                weeks_in_quarter = sorted(df[COL_WEEK].unique())
+                    pass # Keep all weeks if quarter filter fails
+
+            available_weeks = sorted(weeks_in_period[COL_WEEK].unique())
 
             # Create week options only if weeks are available
-            if weeks_in_quarter:
-                 week_options = ["All"] + [str(int(w)) for w in weeks_in_quarter]
-                 week_choice = st.sidebar.selectbox("Select Week", week_options, index=0, key="week_filter") # Default to 'All'
+            if available_weeks:
+                 week_options = ["All"] + [str(int(w)) for w in available_weeks]
+                 # Try to preserve week selection if it's still valid, else default to "All"
+                 current_week_selection = st.session_state.get("week_filter_val", "All")
+                 if current_week_selection not in week_options:
+                      current_week_selection = "All"
+                 week_choice = st.sidebar.selectbox(
+                      "Select Week", week_options, index=week_options.index(current_week_selection), key="week_filter",
+                      on_change=lambda: st.session_state.update(week_filter_val=st.session_state.week_filter)
+                      )
             else:
                  st.sidebar.markdown("_No weeks available for selected quarter._")
                  week_options = ["All"] # Ensure options list is not empty
                  week_choice = "All" # Force 'All' if no specific weeks
-
         else:
              st.sidebar.markdown("_Week information not available._")
 
 
-        # Store Filter
+        # --- Store Filter ---
         if store_list:
-            store_choice = st.sidebar.multiselect("Select Store(s)", store_list, default=[], key="store_filter")
+            # Try to preserve store selection
+            current_store_selection = st.session_state.get("store_filter_val", [])
+            # Filter out any previously selected stores that are no longer in the list
+            valid_store_selection = [s for s in current_store_selection if s in store_list]
+            store_choice = st.sidebar.multiselect(
+                 "Select Store(s)", store_list, default=valid_store_selection, key="store_filter",
+                 on_change=lambda: st.session_state.update(store_filter_val=st.session_state.store_filter)
+                 )
         else:
             st.sidebar.markdown("_Store information not available._")
 
 
-        # Advanced Settings
+        # --- Advanced Settings ---
         with st.sidebar.expander("Advanced Settings", expanded=False):
-            z_threshold = st.slider("Anomaly Z-score Threshold", 1.0, 3.0, DEFAULT_Z_THRESHOLD, 0.1, key="z_slider")
-            show_ma = st.checkbox(f"Show {DEFAULT_TREND_WINDOW}-week moving average", value=DEFAULT_SHOW_MA, key="ma_checkbox")
-            trend_analysis_weeks = st.slider("Trend analysis window (weeks)", MIN_TREND_WINDOW, MAX_TREND_WINDOW, DEFAULT_TREND_WINDOW, key="trend_window_slider")
+            z_threshold = st.slider("Anomaly Z-score Threshold", 1.0, 3.0, float(st.session_state.get("z_slider_val", DEFAULT_Z_THRESHOLD)), 0.1, key="z_slider", on_change=lambda: st.session_state.update(z_slider_val=st.session_state.z_slider))
+            show_ma = st.checkbox(f"Show {DEFAULT_TREND_WINDOW}-week moving average", value=st.session_state.get("ma_checkbox_val", DEFAULT_SHOW_MA), key="ma_checkbox", on_change=lambda: st.session_state.update(ma_checkbox_val=st.session_state.ma_checkbox))
+            trend_analysis_weeks = st.slider("Trend analysis window (weeks)", MIN_TREND_WINDOW, MAX_TREND_WINDOW, int(st.session_state.get("trend_window_slider_val", DEFAULT_TREND_WINDOW)), key="trend_window_slider", on_change=lambda: st.session_state.update(trend_window_slider_val=st.session_state.trend_window_slider))
             st.caption("Adjust sensitivity for anomaly detection and overall trend analysis.")
 
-    # Footer and Help (Always display)
+    # --- Show prompt if no data file is uploaded yet ---
+    elif not data_file_exists:
+         st.sidebar.info("Upload data file to see filters.")
+
+
+    # --- Footer and Help (Always display) ---
     now = datetime.datetime.now()
     st.sidebar.markdown("---")
-    # st.sidebar.caption(f"© Publix Super Markets, Inc. {now.year}") # As per original code - Consider removing if not official
+    # Consider removing copyright if not applicable/official
+    # st.sidebar.caption(f"© Publix Super Markets, Inc. {now.year}")
     st.sidebar.caption(f"Dashboard Refactored - Run: {now.strftime('%Y-%m-%d %H:%M')}")
     with st.sidebar.expander("Help & Information"):
-        st.markdown("### Using This Dashboard\n- **Upload Data**: Start by uploading your engagement data file\n- **Apply Filters**: Use the filters to focus on specific time periods or stores\n- **Explore Tabs**: Each tab provides different insights:\n    - **Engagement Trends**: Performance over time\n    - **Store Comparison**: Compare stores directly\n    - **Store Performance Categories**: Categories and action plans\n    - **Anomalies & Insights**: Unusual patterns and opportunities\n\n_Disclaimer: This is not an official Publix tool. Use data responsibly._") # Added disclaimer note
+        st.markdown("#### Using This Dashboard")
+        st.markdown("- **Upload Data**: Start by uploading your engagement data file.")
+        st.markdown("- **Apply Filters**: Use the filters to focus on specific time periods or stores.")
+        st.markdown("- **Explore Tabs**: Each tab provides different insights:")
+        st.markdown("  - `Engagement Trends`: Performance over time")
+        st.markdown("  - `Store Comparison`: Compare stores directly")
+        st.markdown("  - `Store Performance Categories`: Categories and action plans")
+        st.markdown("  - `Anomalies & Insights`: Unusual patterns and opportunities")
+        st.markdown("#### Disclaimer")
+        st.markdown("_This is not an official Publix tool. Use data responsibly._")
 
-    return data_file, comp_file, quarter_choice, week_choice, store_choice, z_threshold, show_ma, trend_analysis_weeks
+
+    # Return only the filter values, file objects are handled outside
+    return quarter_choice, week_choice, store_choice, z_threshold, show_ma, trend_analysis_weeks
 
 
 def display_executive_summary(summary_data: Dict[str, Any]):
     """Displays the executive summary metrics and text."""
     st.subheader("Executive Summary")
-    if summary_data['current_week'] is None:
+    # Check if essential data for summary exists
+    if summary_data.get('current_week') is None or summary_data.get('current_avg') is None:
         st.info("Not enough data to generate executive summary based on current filters.")
         return
 
     col1, col2, col3 = st.columns(3)
 
-    # Metric 1: Average Engagement
+    # --- Metric 1: Average Engagement ---
     avg_display = format_percentage(summary_data['current_avg'])
-    delta_str = format_delta(summary_data['delta_val']) if summary_data['prev_week'] is not None else "N/A"
-    col1.metric(f"{summary_data['avg_label']} (Week {summary_data['current_week']})", avg_display, delta_str)
+    # Determine delta only if previous week and average are available
+    delta_str = "N/A"
+    if summary_data.get('prev_week') is not None and summary_data.get('prev_avg') is not None:
+        delta_str = format_delta(summary_data.get('delta_val')) # Use .get for safety
+    col1.metric(
+        label=f"{summary_data.get('avg_label', 'Avg Engagement')} (Week {summary_data['current_week']})",
+        value=avg_display,
+        delta=delta_str,
+        help=f"Average engagement for Week {summary_data['current_week']}. Delta compares to Week {summary_data.get('prev_week', 'N/A')}."
+    )
 
-    # Metric 2 & 3: Top/Bottom Performers
-    if summary_data['top_store'] is not None:
-        top_perf_str = f"Store {summary_data['top_store']} — {format_percentage(summary_data['top_val'])}"
-        col2.metric(f"Top Performer (Week {summary_data['current_week']})", top_perf_str, help="Highest average engagement for the week among selected stores.")
-        # Add trend for top performer
-        top_trend = summary_data['store_trends'].get(summary_data['top_store'], "N/A")
+    # --- Metric 2 & 3: Top/Bottom Performers ---
+    # Top Performer
+    if summary_data.get('top_store') is not None:
+        top_perf_str = f"Store {summary_data['top_store']} — {format_percentage(summary_data.get('top_val'))}"
+        col2.metric(
+            label=f"Top Performer (Week {summary_data['current_week']})",
+            value=top_perf_str,
+            help="Highest average engagement for the week among selected stores."
+        )
+        # Add trend for top performer (trend calculated over the whole filtered period)
+        top_trend = summary_data.get('store_trends', pd.Series(dtype=str)).get(summary_data['top_store'], "N/A")
         t_color_class = "highlight-good" if top_trend in ["Upward","Strong Upward"] else "highlight-bad" if top_trend in ["Downward","Strong Downward"] else "highlight-neutral"
         col2.markdown(f"<small>Trend (Period): <span class='{t_color_class}'>{top_trend}</span></small>", unsafe_allow_html=True)
+    else:
+        col2.metric(f"Top Performer (Week {summary_data['current_week']})", "N/A")
 
-    if summary_data['bottom_store'] is not None:
-        bottom_perf_str = f"Store {summary_data['bottom_store']} — {format_percentage(summary_data['bottom_val'])}"
-        col3.metric(f"Bottom Performer (Week {summary_data['current_week']})", bottom_perf_str, help="Lowest average engagement for the week among selected stores.")
+    # Bottom Performer
+    if summary_data.get('bottom_store') is not None:
+        bottom_perf_str = f"Store {summary_data['bottom_store']} — {format_percentage(summary_data.get('bottom_val'))}"
+        col3.metric(
+            label=f"Bottom Performer (Week {summary_data['current_week']})",
+            value=bottom_perf_str,
+            help="Lowest average engagement for the week among selected stores."
+        )
          # Add trend for bottom performer
-        bottom_trend = summary_data['store_trends'].get(summary_data['bottom_store'], "N/A")
+        bottom_trend = summary_data.get('store_trends', pd.Series(dtype=str)).get(summary_data['bottom_store'], "N/A")
         b_color_class = "highlight-good" if bottom_trend in ["Upward","Strong Upward"] else "highlight-bad" if bottom_trend in ["Downward","Strong Downward"] else "highlight-neutral"
         col3.markdown(f"<small>Trend (Period): <span class='{b_color_class}'>{bottom_trend}</span></small>", unsafe_allow_html=True)
-
-
-    # Summary Text
-    if summary_data['delta_val'] is not None and summary_data['prev_week'] is not None:
-        st.markdown(f"Week {summary_data['current_week']} average engagement is <span class='{summary_data['trend_class']}'>{abs(summary_data['delta_val']):.2f} points {summary_data['trend_dir']}</span> from Week {summary_data['prev_week']}.", unsafe_allow_html=True)
-    elif summary_data['current_avg'] is not None:
-        st.markdown(f"Week {summary_data['current_week']} engagement average: <span class='highlight-neutral'>{format_percentage(summary_data['current_avg'])}</span>", unsafe_allow_html=True)
     else:
-         st.markdown("_Average engagement could not be calculated for the current week._")
+        col3.metric(f"Bottom Performer (Week {summary_data['current_week']})", "N/A")
+
+
+    # --- Summary Text ---
+    if summary_data.get('delta_val') is not None and summary_data.get('prev_week') is not None:
+        st.markdown(f"Week {summary_data['current_week']} average engagement is <span class='{summary_data.get('trend_class', 'highlight-neutral')}'>{abs(summary_data['delta_val']):.2f} points {summary_data.get('trend_dir', 'flat')}</span> from Week {summary_data['prev_week']}.", unsafe_allow_html=True)
+    elif summary_data.get('current_avg') is not None:
+        st.markdown(f"Week {summary_data['current_week']} engagement average: <span class='highlight-neutral'>{format_percentage(summary_data['current_avg'])}</span>", unsafe_allow_html=True)
+    # No else needed, covered by the initial check
 
 
 def display_key_insights(insights: List[str]):
@@ -1247,14 +1502,14 @@ def display_key_insights(insights: List[str]):
     if not insights or insights == ["No data available for insights."]:
         st.info("Not enough data to generate key insights for the current selection.")
         return
-    # Use columns for better layout if many insights
-    # cols = st.columns(len(insights))
+    # Display insights as a list
+    insight_text = ""
     for i, point in enumerate(insights, start=1):
-         # with cols[i-1]: # Put each insight in its own column (might be too wide)
-         st.markdown(f"{i}. {point}")
+        insight_text += f"{i}. {point}\n"
+    st.markdown(insight_text)
 
 
-def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: Optional[pd.DataFrame], show_ma: bool, district_trend: pd.DataFrame, district_trend_comp: Optional[pd.DataFrame]):
+def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: Optional[pd.DataFrame], show_ma: bool, district_trend: Optional[pd.DataFrame], district_trend_comp: Optional[pd.DataFrame]):
     """Displays the content for the Engagement Trends tab."""
     st.subheader("Engagement Trends Over Time")
 
@@ -1275,21 +1530,21 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
 
 
     # Calculate Moving Averages on the potentially combined data
-    df_plot = calculate_moving_averages(df_plot)
+    df_plot = calculate_moving_averages(df_plot) # Will add MA_4W column
 
 
     # --- Recent Trends Specific Filters & Metrics ---
     stores_to_show_custom = []
     if view_option == "Recent Trends":
-        all_weeks = sorted(df_plot[COL_WEEK].unique())
+        all_weeks = sorted(df_plot[COL_WEEK].unique()) if COL_WEEK in df_plot.columns else []
         if len(all_weeks) > 1:
             min_week, max_week = min(all_weeks), max(all_weeks)
+            # Suggest a default range of last 8 weeks or all if fewer than 8
             default_start = all_weeks[0] if len(all_weeks) <= 8 else all_weeks[-8]
             default_end = all_weeks[-1]
             # Ensure default_start is not after default_end if few weeks exist
             if default_start > default_end: default_start = default_end
 
-            # Use tuple for value in select_slider
             try:
                 recent_weeks_range = st.select_slider(
                     "Select weeks to display:",
@@ -1299,7 +1554,8 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
                     key="recent_weeks_slider"
                 )
             except st.errors.StreamlitAPIException:
-                 # Handle case where default value might be invalid (e.g., only one week)
+                 # Fallback if default value might be invalid (e.g., only one week)
+                 st.warning("Could not set default week range. Please select manually.")
                  recent_weeks_range = st.select_slider(
                      "Select weeks to display:",
                      options=all_weeks,
@@ -1315,42 +1571,50 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
                 # Ensure start <= end
                 if start_week > end_week: start_week, end_week = end_week, start_week
 
+                # Filter the main plot data and the district trends
                 df_plot = df_plot[(df_plot[COL_WEEK] >= start_week) & (df_plot[COL_WEEK] <= end_week)]
-                district_trend = district_trend[(district_trend[COL_WEEK] >= start_week) & (district_trend[COL_WEEK] <= end_week)] if district_trend is not None else None
-                district_trend_comp = district_trend_comp[(district_trend_comp[COL_WEEK] >= start_week) & (district_trend_comp[COL_WEEK] <= end_week)] if district_trend_comp is not None else None
+                if district_trend is not None:
+                     district_trend = district_trend[(district_trend[COL_WEEK] >= start_week) & (district_trend[COL_WEEK] <= end_week)]
+                if district_trend_comp is not None:
+                     district_trend_comp = district_trend_comp[(district_trend_comp[COL_WEEK] >= start_week) & (district_trend_comp[COL_WEEK] <= end_week)]
 
-            # Display Recent Trend Metrics
+            # --- Display Recent Trend Metrics ---
             st.markdown("---") # Separator
             st.markdown("##### Metrics for Selected Recent Weeks")
             col1, col2 = st.columns(2)
             with col1:
+                metric_val, metric_delta = "N/A", None
+                help_text = "Requires at least two weeks in the selected range."
                 if district_trend is not None and len(district_trend) >= 2:
                     last_two = district_trend.sort_values(COL_WEEK).tail(2)
                     cur_val = last_two['Average Engagement %'].iloc[1]
                     prev_val = last_two['Average Engagement %'].iloc[0]
-                    change_pct = ((cur_val - prev_val) / prev_val * 100) if prev_val != 0 else 0
-                    st.metric("District Trend (Week-over-Week)", f"{cur_val:.2f}%", f"{change_pct:+.1f}%", help="Change between the last two weeks shown in the chart.")
-                else:
-                     st.metric("District Trend (Week-over-Week)", "N/A", help="Requires at least two weeks in the selected range.")
+                    metric_val = format_percentage(cur_val)
+                    if pd.notna(cur_val) and pd.notna(prev_val) and prev_val != 0:
+                        change_pct = ((cur_val - prev_val) / prev_val * 100)
+                        metric_delta = f"{change_pct:+.1f}%"
+                        help_text = f"Change between Week {last_two[COL_WEEK].iloc[0]} and Week {last_two[COL_WEEK].iloc[1]}."
+                    elif pd.notna(cur_val):
+                         help_text = f"Latest week ({last_two[COL_WEEK].iloc[1]}) average shown. Previous week data missing or zero."
+
+                st.metric("District Trend (Week-over-Week)", metric_val, metric_delta, help=help_text)
+
             with col2:
+                 metric_val, metric_delta = "N/A", None
+                 help_text = "Data unavailable for the last week in range."
                  if not df_plot.empty:
                      last_week = safe_max(df_plot[COL_WEEK])
                      if last_week is not None:
                          last_week_data = df_plot[df_plot[COL_WEEK] == last_week]
                          if not last_week_data.empty:
-                            best_store_row = last_week_data.loc[safe_idxmax(last_week_data[COL_ENGAGED_PCT])] if safe_idxmax(last_week_data[COL_ENGAGED_PCT]) is not None else None
-                            if best_store_row is not None:
-                                 st.metric(f"Top Performer (Week {last_week})", f"Store {best_store_row[COL_STORE_ID]}", f"{best_store_row[COL_ENGAGED_PCT]:.2f}%", delta_color="off", help="Best performing store in the last week shown.")
-                            else:
-                                 st.metric(f"Top Performer (Week {last_week})", "N/A")
+                            top_store_idx = safe_idxmax(last_week_data[COL_ENGAGED_PCT])
+                            if top_store_idx is not None:
+                                 best_store_row = last_week_data.loc[top_store_idx]
+                                 metric_val = f"Store {best_store_row[COL_STORE_ID]}"
+                                 metric_delta = format_percentage(best_store_row[COL_ENGAGED_PCT])
+                                 help_text = f"Best performing store in Week {last_week}."
+                 st.metric(f"Top Performer (Last Week)", metric_val, metric_delta, delta_color="off", help=help_text)
 
-                         else:
-                            st.metric(f"Top Performer (Week {last_week})", "N/A")
-
-                     else:
-                         st.metric("Top Performer", "N/A")
-                 else:
-                     st.metric("Top Performer", "N/A")
             st.markdown("---") # Separator
 
 
@@ -1365,7 +1629,14 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
     elif view_option == "Custom Selection":
         available_stores = sorted(df_filtered[COL_STORE_ID].unique()) if COL_STORE_ID in df_filtered.columns else []
         if available_stores:
-             stores_to_show_custom = st.multiselect("Select stores to compare:", options=available_stores, default=[], key="custom_store_select")
+             # Use session state for multiselect default
+             default_selection = st.session_state.get("custom_store_select_val", [])
+             # Ensure default selection is valid within available stores
+             valid_default = [s for s in default_selection if s in available_stores]
+             stores_to_show_custom = st.multiselect(
+                  "Select stores to compare:", options=available_stores, default=valid_default, key="custom_store_select",
+                  on_change=lambda: st.session_state.update(custom_store_select_val=st.session_state.custom_store_select)
+                  )
              if not stores_to_show_custom:
                   st.info("Please select at least one store to display in Custom Selection mode.")
                   # Don't plot if no stores selected in this mode
@@ -1383,29 +1654,31 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
         # Caption for view mode
         caption = ""
         if view_option == "All Stores":
-            caption = "**All Stores View:** Shows all store trends with interactive legend. Black dashed line = district average."
+            caption = "**All Stores View:** Shows all store trends with interactive legend. Black dashed line = average for selected stores/period."
         elif view_option == "Custom Selection":
-             caption = "**Custom Selection View:** Shows only selected stores. Black dashed line = district average."
+             caption = "**Custom Selection View:** Shows only selected stores. Black dashed line = average for selected stores/period."
         elif view_option == "Recent Trends":
-             caption = "**Recent Trends View:** Focuses on selected weeks. Black dashed line = district average."
+             caption = "**Recent Trends View:** Focuses on selected weeks. Black dashed line = average for selected stores/period."
 
         if df_comp_plot is not None and not df_comp_plot.empty:
-            caption += " Gray dashed line = comparison period's district average."
+            caption += " Gray dashed line = comparison period's average."
         if show_ma:
-             caption += " Lighter dashed lines = 4-week moving averages."
+             caption += f" Lighter dashed lines = {DEFAULT_TREND_WINDOW}-week moving averages."
         st.caption(caption)
 
-    else:
+    elif view_option != "Custom Selection" or stores_to_show_custom: # Only show info if not waiting for custom selection
         st.info("No data available to display engagement trend chart for the current selection.")
+
 
     # --- Weekly Engagement Heatmap ---
     st.subheader("Weekly Engagement Heatmap")
     with st.expander("Heatmap Settings", expanded=False):
         colA, colB = st.columns(2)
         with colA:
-            sort_method = st.selectbox("Sort stores by:", ["Average Engagement", "Recent Performance"], index=0, key="heatmap_sort")
+            sort_method = st.selectbox("Sort stores by:", ["Average Engagement", "Recent Performance"], index=st.session_state.get("heatmap_sort_idx", 0), key="heatmap_sort", on_change=lambda: st.session_state.update(heatmap_sort_idx=["Average Engagement", "Recent Performance"].index(st.session_state.heatmap_sort)))
         with colB:
-            color_scheme = st.selectbox("Color scheme:", COLOR_SCHEME_OPTIONS, index=0, key="heatmap_color").lower()
+            color_scheme = st.selectbox("Color scheme:", COLOR_SCHEME_OPTIONS, index=st.session_state.get("heatmap_color_idx", 0), key="heatmap_color", on_change=lambda: st.session_state.update(heatmap_color_idx=COLOR_SCHEME_OPTIONS.index(st.session_state.heatmap_color))).lower()
+
 
     # Filter heatmap data by week range slider
     heatmap_df_base = df_filtered.copy() # Use original filtered data for heatmap base
@@ -1417,12 +1690,16 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
         # Ensure slider values are within the available range
         slider_min = min_w
         slider_max = max_w
-        default_slider_val = (slider_min, slider_max)
+        # Get default from session state or calculate
+        default_slider_start = st.session_state.get("heatmap_slider_val_start", slider_min)
+        default_slider_end = st.session_state.get("heatmap_slider_val_end", slider_max)
+        # Ensure defaults are within the current options
+        if default_slider_start not in weeks_list: default_slider_start = slider_min
+        if default_slider_end not in weeks_list: default_slider_end = slider_max
+        # Ensure start <= end
+        if default_slider_start > default_slider_end: default_slider_start, default_slider_end = default_slider_end, default_slider_start
 
-        # Handle case where min > max (shouldn't happen with sorted list > 1)
-        if slider_min > slider_max:
-            slider_min, slider_max = slider_max, slider_min # Swap if needed
-            default_slider_val = (slider_min, slider_max)
+        default_slider_val = (default_slider_start, default_slider_end)
 
         # Ensure options are unique if list has duplicates (shouldn't with unique())
         unique_weeks_list = sorted(list(set(weeks_list)))
@@ -1432,10 +1709,12 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
                 "Select week range for heatmap:",
                 options=unique_weeks_list,
                 value=default_slider_val,
-                key="heatmap_week_slider"
+                key="heatmap_week_slider",
+                 on_change=lambda: st.session_state.update(heatmap_slider_val_start=st.session_state.heatmap_week_slider[0], heatmap_slider_val_end=st.session_state.heatmap_week_slider[1])
             )
-        except st.errors.StreamlitAPIException:
+        except (st.errors.StreamlitAPIException, ValueError, IndexError):
              # Fallback if default value is outside options (e.g., single week data)
+             st.warning("Could not set default heatmap week range. Please select manually.")
              selected_range = st.select_slider(
                  "Select week range for heatmap:",
                  options=unique_weeks_list,
@@ -1469,7 +1748,7 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
         st.info("No data available for the heatmap based on current filters.")
 
 
-    # --- Recent Performance Trends Section ---
+    # --- Recent Performance Trends Section (Based on Heatmap Range) ---
     st.subheader("Recent Performance Trends (within Heatmap Range)")
     with st.expander("About This Section", expanded=False): # Default collapsed
         st.write("This section shows which stores are **improving**, **stable**, or **declining** over the last several weeks *within the date range selected for the heatmap above*, focusing on short-term momentum.")
@@ -1477,16 +1756,23 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
 
     col1, col2 = st.columns(2)
     with col1:
-        trend_window_recent = st.slider("Number of recent weeks to analyze", MIN_TREND_WINDOW, MAX_TREND_WINDOW, RECENT_TRENDS_WINDOW, key="recent_trend_window")
+        # Use session state for slider default
+        default_recent_window = st.session_state.get("recent_trend_window_val", RECENT_TRENDS_WINDOW)
+        trend_window_recent = st.slider("Number of recent weeks to analyze", MIN_TREND_WINDOW, MAX_TREND_WINDOW, default_recent_window, key="recent_trend_window", on_change=lambda: st.session_state.update(recent_trend_window_val=st.session_state.recent_trend_window))
     with col2:
-        sensitivity = st.select_slider("Sensitivity to small changes", options=["Low", "Medium", "High"], value="Medium", key="recent_trend_sensitivity")
+        # Use session state for slider default
+        default_sensitivity = st.session_state.get("recent_trend_sensitivity_val", "Medium")
+        sensitivity = st.select_slider("Sensitivity to small changes", options=["Low", "Medium", "High"], value=default_sensitivity, key="recent_trend_sensitivity", on_change=lambda: st.session_state.update(recent_trend_sensitivity_val=st.session_state.recent_trend_sensitivity))
         momentum_threshold = RECENT_TRENDS_SENSITIVITY_MAP[sensitivity]
+
 
     # Use the heatmap_df as it's already filtered by the week slider
     recent_trends_df = calculate_recent_performance_trends(heatmap_df, trend_window_recent, momentum_threshold)
 
+
     if recent_trends_df.empty:
-        st.info("Not enough data to analyze recent trends for the selected week range and window.")
+        st.info(f"Not enough data (requires at least {trend_window_recent} weeks within the heatmap range) to analyze recent trends.")
+
     else:
         # Display summary metrics
         col_imp, col_stab, col_dec = st.columns(3)
@@ -1498,12 +1784,13 @@ def display_engagement_trends_tab(df_filtered: pd.DataFrame, df_comp_filtered: O
         col_dec.metric("Declining", f"{dec_count} stores", delta="↘️", delta_color="inverse", help=f"Stores showing decline over the last {trend_window_recent} weeks in the selected range.") # Use inverse for down arrow
 
 
+
         # Display cards for each store grouped by direction
         for direction in ["Improving", "Stable", "Declining"]: # Ensure consistent order
             group = recent_trends_df[recent_trends_df['direction'] == direction]
             if group.empty: continue
 
-            color = group.iloc[0]['color']
+            color = group.iloc[0]['color'] # Get color from the first store in the group
             st.markdown(f"<div style='border-left:5px solid {color}; padding-left:10px; margin:20px 0 10px;'><h4 style='color:{color};'>{direction} ({len(group)} stores)</h4></div>", unsafe_allow_html=True)
 
 
@@ -1535,59 +1822,70 @@ def display_store_comparison_tab(df_filtered: pd.DataFrame, week_choice: str):
     """Displays the content for the Store Comparison tab."""
     st.subheader("Store Performance Comparison")
 
-    all_stores = sorted(df_filtered[COL_STORE_ID].unique()) if COL_STORE_ID in df_filtered.columns else []
+    required_cols = [COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT]
+    if df_filtered.empty or not all(col in df_filtered.columns for col in required_cols):
+         st.warning("Data is missing required columns for comparison.")
+         return
+
+    all_stores = sorted(df_filtered[COL_STORE_ID].unique())
     if len(all_stores) < 2:
         st.info("Please select at least two stores in the sidebar filters (or clear store selection) to enable comparison.")
         return
 
     # Prepare comparison data (either single week or period average)
+    comp_data = pd.DataFrame()
+    comp_title = "Store Comparison"
+
     if week_choice != "All":
         try:
              week_num = int(week_choice)
              comp_data_base = df_filtered[df_filtered[COL_WEEK] == week_num].copy()
              comp_title = f"Store Comparison - Week {week_choice}"
-             # Ensure we still group by store in case of duplicate entries for a store in a week (shouldn't happen with clean data)
+             # Ensure we still group by store in case of duplicate entries (shouldn't happen)
              comp_data = comp_data_base.groupby(COL_STORE_ID, as_index=False)[COL_ENGAGED_PCT].mean()
         except ValueError:
              st.error(f"Invalid week selected for comparison: {week_choice}. Showing period average instead.")
-             comp_data = df_filtered.groupby(COL_STORE_ID, as_index=False)[COL_ENGAGED_PCT].mean()
-             comp_title = "Store Comparison - Period Average (Fallback)"
+             # Fallback to period average
+             week_choice = "All"
 
-    else: # Period Average
+    if week_choice == "All": # Handles both the 'All' selection and the fallback
         comp_data = df_filtered.groupby(COL_STORE_ID, as_index=False)[COL_ENGAGED_PCT].mean()
         comp_title = "Store Comparison - Period Average"
 
+    # Check if comp_data is valid after potential grouping/filtering
     if comp_data.empty or COL_ENGAGED_PCT not in comp_data.columns:
         st.warning("No comparison data available for the selected week/period.")
         return
 
     comp_data = comp_data.sort_values(COL_ENGAGED_PCT, ascending=False)
-    district_avg = safe_mean(comp_data[COL_ENGAGED_PCT])
+    # Calculate average based on the specific data being compared
+    comparison_avg = safe_mean(comp_data[COL_ENGAGED_PCT])
 
     # --- Absolute Performance Chart ---
     st.markdown("#### Absolute Engagement Percentage")
-    comparison_chart = create_comparison_bar_chart(comp_data, district_avg, comp_title)
+    comparison_chart = create_comparison_bar_chart(comp_data, comparison_avg, comp_title)
     if comparison_chart:
         st.altair_chart(comparison_chart, use_container_width=True)
-        avg_text = f"average engagement ({format_percentage(district_avg)})" if district_avg is not None else "average engagement (N/A)"
+        avg_text = f"average engagement ({format_percentage(comparison_avg)})" if comparison_avg is not None else "average engagement (N/A)"
         st.caption(f"Red dashed line indicates the {avg_text} for the selected stores and period.")
-
     else:
         st.info("Could not generate absolute comparison chart.")
 
     # --- Relative Performance Chart ---
     st.markdown("#### Performance Relative to Average")
-    relative_chart = create_relative_comparison_chart(comp_data, district_avg)
+    relative_chart = create_relative_comparison_chart(comp_data, comparison_avg)
     if relative_chart:
         st.altair_chart(relative_chart, use_container_width=True)
         st.caption("Green bars = above selected average, red bars = below selected average.")
     else:
-        st.info("Could not generate relative comparison chart (requires valid average).")
+        # Message already shown in create function if avg is invalid
+        pass
 
 
     # --- Weekly Rank Tracking ---
     if COL_RANK in df_filtered.columns:
-        st.markdown("#### Weekly Rank Tracking")
+        st.markdown("#### Weekly Rank Tracking (Lower is Better)")
+        # Use only data that has a rank for this chart
         rank_data = df_filtered[[COL_WEEK, COL_STORE_ID, COL_RANK]].dropna(subset=[COL_RANK])
         if not rank_data.empty:
             rank_chart = create_rank_trend_chart(rank_data)
@@ -1599,7 +1897,9 @@ def display_store_comparison_tab(df_filtered: pd.DataFrame, week_choice: str):
         else:
             st.info("Weekly rank data not available or not numeric for the selected period.")
     else:
-        st.info("Weekly Rank column not found in the data.")
+        # Only show message if rank column was expected but not found
+        # st.info("Weekly Rank column not found in the data.")
+        pass # Don't clutter if rank is just not provided
 
 
 def display_performance_categories_tab(store_stats: pd.DataFrame):
@@ -1615,17 +1915,21 @@ def display_performance_categories_tab(store_stats: pd.DataFrame):
     st.markdown("#### Category Definitions & Actions")
     colA, colB = st.columns(2)
     cols = [colA, colB, colA, colB] # Assign columns cyclically
-    cat_order = [CAT_STAR, CAT_IMPROVING, CAT_STABILIZE, CAT_INTERVENTION] # Display order
+    # Define display order for categories
+    cat_order = [CAT_STAR, CAT_IMPROVING, CAT_STABILIZE, CAT_INTERVENTION]
 
     for i, cat in enumerate(cat_order):
         if cat in PERFORMANCE_CATEGORIES:
             info = PERFORMANCE_CATEGORIES[cat]
             with cols[i]:
+                 # Use flexbox properties in the card style for equal height
                  card_html = f"""
                  <div class='info-card' style='border-left-color: {info['color']};'>
-                     <h4 style='color:{info['color']};'>{info['icon']} {cat}</h4>
-                     <p>{info['explanation']}</p>
-                     <p><strong>Action:</strong> {info['short_action']}</p>
+                     <div> <h4 style='color:{info['color']};'>{info['icon']} {cat}</h4>
+                         <p>{info['explanation']}</p>
+                     </div>
+                     <div> <p><strong>Action:</strong> {info['short_action']}</p>
+                     </div>
                  </div>
                  """
                  st.markdown(card_html, unsafe_allow_html=True)
@@ -1640,28 +1944,31 @@ def display_performance_categories_tab(store_stats: pd.DataFrame):
         color = PERFORMANCE_CATEGORIES.get(cat, {}).get('color', '#757575')
         icon = PERFORMANCE_CATEGORIES.get(cat, {}).get('icon', '')
 
+        # Category Header
         st.markdown(f"<div style='border-left:5px solid {color}; padding-left:15px; margin: 20px 0 10px 0;'><h4 style='color:{color}; margin-bottom: 0;'>{icon} {cat} ({len(subset)} stores)</h4></div>", unsafe_allow_html=True)
 
 
         # Display store cards within the category
         cols = st.columns(min(4, len(subset))) # Max 4 columns for store cards
-        # Sort within category: High-to-low for top cats, Low-to-high for bottom cats
+        # Sort within category: High-to-low avg for top cats, Low-to-high avg for bottom cats
         sort_ascending = (cat in [CAT_IMPROVING, CAT_INTERVENTION])
         subset = subset.sort_values(COL_AVG_ENGAGEMENT, ascending=sort_ascending)
 
         for i, (_, store) in enumerate(subset.iterrows()):
             with cols[i % 4]: # Cycle through columns
-                avg_eng_disp = format_percentage(store.get(COL_AVG_ENGAGEMENT)) # Use .get for safety
-                trend_corr = store.get(COL_TREND_CORR, 0.0) # Use .get for safety
+                # Safely get values using .get()
+                store_id_disp = store.get(COL_STORE_ID, 'N/A')
+                avg_eng_disp = format_percentage(store.get(COL_AVG_ENGAGEMENT))
+                trend_corr = store.get(COL_TREND_CORR, 0.0)
 
-                # Determine trend icon based on correlation
+                # Determine trend icon based on correlation thresholds
                 if trend_corr > TREND_UP: trend_icon = "📈" # Improving
                 elif trend_corr < TREND_DOWN: trend_icon = "📉" # Declining
                 else: trend_icon = "➡️" # Stable
 
                 card_html = f"""
                 <div class='info-card' style='border-left-color: {color};'>
-                    <h4 style='color:{color}; text-align:center;'>Store {store.get(COL_STORE_ID, 'N/A')}</h4>
+                    <h4 style='color:{color}; text-align:center;'>Store {store_id_disp}</h4>
                     <p style='text-align:center;'><span class='value'>{avg_eng_disp}</span> <span class='label'>Avg</span></p>
                     <p style='text-align:center;'>{trend_icon} <span class='value'>{trend_corr:.2f}</span> <span class='label'>Trend Corr.</span></p>
                 </div>
@@ -1673,11 +1980,21 @@ def display_performance_categories_tab(store_stats: pd.DataFrame):
     st.markdown("#### Detailed Action Plan per Store")
     store_list_options = sorted(store_stats[COL_STORE_ID].unique()) if COL_STORE_ID in store_stats.columns else []
 
+
     if not store_list_options:
         st.info("No stores available to select for detailed plan.")
         return
 
-    selected_store = st.selectbox("Select a store:", store_list_options, key="category_store_select")
+    # Use session state for selectbox default
+    default_store = st.session_state.get("category_store_select_val", store_list_options[0])
+    # Ensure default is valid
+    if default_store not in store_list_options: default_store = store_list_options[0]
+
+    selected_store = st.selectbox(
+        "Select a store:", store_list_options, index=store_list_options.index(default_store), key="category_store_select",
+        on_change=lambda: st.session_state.update(category_store_select_val=st.session_state.category_store_select)
+        )
+
 
     if selected_store:
         # Retrieve the row safely
@@ -1687,6 +2004,7 @@ def display_performance_categories_tab(store_stats: pd.DataFrame):
              return
 
         row = row_df.iloc[0] # Get the first (and only) row as a Series
+        # Safely get values from the row Series
         cat = row.get(COL_CATEGORY, CAT_UNCATEGORIZED)
         color = PERFORMANCE_CATEGORIES.get(cat, {}).get('color', '#757575')
         icon = PERFORMANCE_CATEGORIES.get(cat, {}).get('icon', '')
@@ -1695,18 +2013,19 @@ def display_performance_categories_tab(store_stats: pd.DataFrame):
         explanation = row.get(COL_EXPLANATION, "N/A")
         action_plan = row.get(COL_ACTION_PLAN, "N/A")
 
-        # Trend description based on correlation
+        # Determine trend description based on correlation thresholds
         if corr > TREND_STRONG_UP: trend_desc, trend_icon = "Strong positive trend", "🔼"
         elif corr > TREND_UP: trend_desc, trend_icon = "Mild positive trend", "↗️"
         elif corr < TREND_STRONG_DOWN: trend_desc, trend_icon = "Strong negative trend", "🔽"
         elif corr < TREND_DOWN: trend_desc, trend_icon = "Mild negative trend", "↘️"
         else: trend_desc, trend_icon = "Stable trend", "➡️"
 
+        # Display the detailed card
         detail_html = f"""
         <div class='info-card' style='border-left-color: {color}; padding: 20px;'>
             <h3 style='color:{color}; margin-top:0;'>{icon} Store {selected_store} - {cat}</h3>
-            <p><strong>Average Engagement:</strong> {format_percentage(avg_val)}</p>
-            <p><strong>Trend:</strong> {trend_icon} {trend_desc} (Correlation: {corr:.2f})</p>
+            <p><strong>Average Engagement (Period):</strong> {format_percentage(avg_val)}</p>
+            <p><strong>Trend Correlation (Period):</strong> {trend_icon} {trend_desc} ({corr:.2f})</p>
             <p><strong>Explanation:</strong> {explanation}</p>
             <h4 style='color:{color}; margin-top:1em;'>Recommended Action Plan:</h4>
             <p>{action_plan}</p>
@@ -1714,35 +2033,34 @@ def display_performance_categories_tab(store_stats: pd.DataFrame):
         """
         st.markdown(detail_html, unsafe_allow_html=True)
 
-        # Additional context for lower-performing categories
+        # --- Additional context for lower-performing categories ---
         if cat in [CAT_IMPROVING, CAT_INTERVENTION]:
             st.markdown("---")
             st.markdown("##### Improvement Opportunities & Context")
-            # Suggest learning partners
+            # Suggest learning partners (Star Performers)
             top_stores = store_stats[store_stats[COL_CATEGORY] == CAT_STAR][COL_STORE_ID].tolist()
             if top_stores:
-                partners = ", ".join(f"Store {s}" for s in top_stores)
+                partners = ", ".join(f"**Store {s}**" for s in top_stores)
                 partner_color = PERFORMANCE_CATEGORIES.get(CAT_STAR, {}).get('color', '#2E7D32')
-                st.markdown(f"<div class='info-card' style='border-left-color: {partner_color};'><h4 style='color:{partner_color}; margin-top:0;'>Potential Learning Partners</h4><p>Consider reviewing strategies from top performers: <strong>{partners}</strong></p></div>", unsafe_allow_html=True)
-
+                st.markdown(f"<div class='info-card' style='border-left-color: {partner_color};'><h4 style='color:{partner_color}; margin-top:0;'>Potential Learning Partners</h4><p>Consider reviewing strategies from top performers: {partners}</p></div>", unsafe_allow_html=True)
             else:
                  st.markdown("<div class='info-card' style='border-left-color: #ccc;'><h4 style='margin-top:0;'>Potential Learning Partners</h4><p>No stores currently categorized as 'Star Performers' in this period.</p></div>", unsafe_allow_html=True)
 
 
-            # Show gap to median
+            # Show gap to median engagement
             median_eng = store_stats[COL_AVG_ENGAGEMENT].median()
             current_eng = avg_val if avg_val is not None else 0
             # Ensure median is valid before calculating gain
             if pd.notna(median_eng):
                  gain = median_eng - current_eng
-                 if gain > 0:
+                 if gain > 0: # Only show if below median
                       gain_color = PERFORMANCE_CATEGORIES.get(CAT_IMPROVING, {}).get('color', '#1976D2')
                       st.markdown(f"<div class='info-card' style='border-left-color: {gain_color}; margin-top:15px;'><h4 style='color:{gain_color}; margin-top:0;'>Gap to Median</h4><p>Current average: <strong>{format_percentage(current_eng)}</strong> | District median: <strong>{format_percentage(median_eng)}</strong> | Potential gain to median: <strong>{gain:.2f}%</strong></p></div>", unsafe_allow_html=True)
 
-                 else:
+                 else: # Already at or above median
                       st.markdown(f"<div class='info-card' style='border-left-color: #ccc; margin-top:15px;'><h4 style='margin-top:0;'>Gap to Median</h4><p>Store is already performing at or above the median engagement ({format_percentage(median_eng)}).</p></div>", unsafe_allow_html=True)
 
-            else:
+            else: # Median could not be calculated
                  st.markdown(f"<div class='info-card' style='border-left-color: #ccc; margin-top:15px;'><h4 style='margin-top:0;'>Gap to Median</h4><p>Median engagement could not be calculated.</p></div>", unsafe_allow_html=True)
 
 
@@ -1762,29 +2080,38 @@ def display_anomalies_insights_tab(anomalies_df: pd.DataFrame, recommendations_d
             COL_STORE_ID, COL_WEEK, COL_ENGAGED_PCT, COL_CHANGE_PCT_PTS,
             COL_Z_SCORE, COL_RANK, COL_PREV_RANK, COL_POSSIBLE_EXPLANATION
         ]
+        # Ensure columns exist before selecting/renaming
         anomalies_display = anomalies_df[[col for col in display_cols if col in anomalies_df.columns]].copy()
-        anomalies_display.rename(columns={
+        rename_map = {
             COL_ENGAGED_PCT: 'Engagement %',
             COL_CHANGE_PCT_PTS: 'Change Pts',
             COL_Z_SCORE: 'Z-Score',
             COL_RANK: 'Current Rank',
             COL_PREV_RANK: 'Previous Rank',
             COL_POSSIBLE_EXPLANATION: 'Possible Explanation'
-        }, inplace=True)
+        }
+        anomalies_display.rename(columns=rename_map, inplace=True)
 
-        # Display with formatting
+        # Define column configuration for formatting
+        column_config={
+            "Engagement %": st.column_config.NumberColumn(format="%.2f%%"),
+            "Change Pts": st.column_config.NumberColumn(format="%+.2f pts"), # Add units
+            "Z-Score": st.column_config.NumberColumn(format="%.2f"),
+             # Use format="d" for integers, handle potential NAs gracefully
+            "Current Rank": st.column_config.NumberColumn(format="%d"),
+            "Previous Rank": st.column_config.NumberColumn(format="%d"),
+            "Possible Explanation": st.column_config.TextColumn(width="large") # Allow more width
+        }
+        # Remove config for columns that might be missing (like rank)
+        final_config = {k: v for k, v in column_config.items() if k in anomalies_display.columns}
+
+
         st.dataframe(
              anomalies_display,
-             column_config={
-                  "Engagement %": st.column_config.NumberColumn(format="%.2f%%"),
-                  "Change Pts": st.column_config.NumberColumn(format="%+.2f"),
-                  "Z-Score": st.column_config.NumberColumn(format="%.2f"),
-                  "Current Rank": st.column_config.NumberColumn(format="%d"),
-                  "Previous Rank": st.column_config.NumberColumn(format="%d"),
-             },
-             hide_index=True
+             column_config=final_config,
+             hide_index=True,
+             use_container_width=True
         )
-
         st.caption("Anomalies are sorted by the magnitude of the Z-score (most significant first).")
 
 
@@ -1809,8 +2136,10 @@ def display_anomalies_insights_tab(anomalies_df: pd.DataFrame, recommendations_d
               rec_display,
               column_config={
                    "Avg Engagement % (Period)": st.column_config.NumberColumn(format="%.2f%%"),
+                   "Recommendation": st.column_config.TextColumn(width="large")
               },
-              hide_index=True
+              hide_index=True,
+              use_container_width=True
          )
 
 
@@ -1818,73 +2147,130 @@ def display_anomalies_insights_tab(anomalies_df: pd.DataFrame, recommendations_d
 
 def main():
     """Main function to run the Streamlit application."""
-    # --- Page Config ---
+    # --- Page Config (Must be the first Streamlit command) ---
     st.set_page_config(
         page_title=APP_TITLE,
         layout=PAGE_LAYOUT,
         initial_sidebar_state=INITIAL_SIDEBAR_STATE
     )
+
+    # --- Initialize Session State ---
+    # Used to preserve widget states across reruns
+    if "quarter_filter_idx" not in st.session_state: st.session_state.quarter_filter_idx = 0
+    if "week_filter_val" not in st.session_state: st.session_state.week_filter_val = "All"
+    if "store_filter_val" not in st.session_state: st.session_state.store_filter_val = []
+    if "z_slider_val" not in st.session_state: st.session_state.z_slider_val = DEFAULT_Z_THRESHOLD
+    if "ma_checkbox_val" not in st.session_state: st.session_state.ma_checkbox_val = DEFAULT_SHOW_MA
+    if "trend_window_slider_val" not in st.session_state: st.session_state.trend_window_slider_val = DEFAULT_TREND_WINDOW
+    if "heatmap_sort_idx" not in st.session_state: st.session_state.heatmap_sort_idx = 0
+    if "heatmap_color_idx" not in st.session_state: st.session_state.heatmap_color_idx = 0
+    if "heatmap_slider_val_start" not in st.session_state: st.session_state.heatmap_slider_val_start = None # Initialize later
+    if "heatmap_slider_val_end" not in st.session_state: st.session_state.heatmap_slider_val_end = None
+    if "category_store_select_val" not in st.session_state: st.session_state.category_store_select_val = None # Initialize later
+    if "recent_trend_window_val" not in st.session_state: st.session_state.recent_trend_window_val = RECENT_TRENDS_WINDOW
+    if "recent_trend_sensitivity_val" not in st.session_state: st.session_state.recent_trend_sensitivity_val = "Medium"
+
+
+    # --- Apply CSS and Title ---
     st.markdown(APP_CSS, unsafe_allow_html=True)
     st.markdown(f"<h1 class='dashboard-title'>{APP_TITLE}</h1>", unsafe_allow_html=True)
     st.markdown("Analyze **Club Publix** engagement data. Upload weekly data to explore KPIs, trends, and opportunities across stores. Use sidebar filters to refine the view.")
 
-    # --- Sidebar and Data Loading ---
+
+    # --- Sidebar: File Uploaders (Create these only ONCE) ---
+    st.sidebar.header("Data Input")
+    # Use unique keys for file uploaders
+    data_file = st.sidebar.file_uploader(
+        "Upload engagement data (Excel or CSV)",
+        type=['csv', 'xlsx'],
+        key="data_uploader_widget", # Unique key
+        help="Upload the primary data file containing weekly engagement percentages."
+    )
+    comp_file = st.sidebar.file_uploader(
+        "Optional: Upload comparison data (prior period)",
+        type=['csv', 'xlsx'],
+        key="comp_uploader_widget", # Unique key
+        help="Upload a similar file for a previous period (e.g., last year) for comparison."
+    )
+
+
+    # --- Data Loading ---
+    # Initialize DataFrames to None
     df_all = None
     df_comp_all = None
     store_list = [] # Initialize empty store list
 
-    # Initial sidebar display (before data is loaded)
-    data_file, comp_file, quarter_choice, week_choice, store_choice, z_threshold, show_ma, trend_analysis_weeks = display_sidebar(None)
-
+    # Process primary data file if uploaded
     if data_file:
         df_all = load_and_process_data(data_file)
-        if df_all is None or df_all.empty:
+        if df_all is not None and not df_all.empty:
+             if COL_STORE_ID in df_all.columns:
+                  store_list = sorted(df_all[COL_STORE_ID].unique())
+             # Initialize session state defaults based on loaded data if not already set
+             if st.session_state.heatmap_slider_val_start is None and COL_WEEK in df_all.columns:
+                 weeks = sorted(df_all[COL_WEEK].unique())
+                 if weeks:
+                      st.session_state.heatmap_slider_val_start = weeks[0]
+                      st.session_state.heatmap_slider_val_end = weeks[-1]
+             if st.session_state.category_store_select_val is None and store_list:
+                  st.session_state.category_store_select_val = store_list[0]
+
+        else:
              st.error("Failed to load or process primary data file. Please check the file format, required columns (Store #, Week/Date, Engaged Transaction %), and ensure data exists.")
-             st.stop() # Stop execution if primary data fails
-        elif COL_STORE_ID in df_all.columns:
-             store_list = sorted(df_all[COL_STORE_ID].unique())
+             # Keep df_all as None or empty to prevent further processing
 
 
-        if comp_file:
-            df_comp_all = load_and_process_data(comp_file)
-            if df_comp_all is None or df_comp_all.empty:
-                 st.warning("Failed to load or process comparison data file. It will be ignored.")
-                 df_comp_all = None # Ensure it's None if loading failed
+    # Process comparison data file if uploaded
+    if comp_file:
+        df_comp_all = load_and_process_data(comp_file)
+        if df_comp_all is None or df_comp_all.empty:
+             st.warning("Failed to load or process comparison data file. It will be ignored.")
+             df_comp_all = None # Ensure it's None if loading failed
 
 
-        # --- Update Sidebar with Data-Driven Options ---
-        # Re-render sidebar now that df_all is loaded and store_list is populated
-        _, _, quarter_choice, week_choice, store_choice, z_threshold, show_ma, trend_analysis_weeks = display_sidebar(df_all)
+    # --- Sidebar: Filters & Settings (Run this section based on whether data loaded) ---
+    # Pass df_all and a boolean indicating if data_file exists and was loaded successfully
+    quarter_choice, week_choice, store_choice, z_threshold, show_ma, trend_analysis_weeks = display_sidebar(
+        df=df_all,
+        data_file_exists=(df_all is not None and not df_all.empty) # Pass status of primary data
+    )
 
 
-    else:
+    # --- Main Panel Logic ---
+    # Show initial message if no data file is uploaded
+    if not data_file:
         st.info("Please upload a primary engagement data file using the sidebar to begin analysis.")
-        st.markdown("### Required Columns")
-        st.markdown(f"- `{COL_STORE_ID}`\n- `{COL_WEEK}` or `{COL_DATE}`\n- `{COL_ENGAGED_PCT}`")
-        st.markdown("### Optional Columns")
-        st.markdown(f"- `{COL_RANK}`\n- `{COL_QTD_PCT}`")
-        st.stop() # Stop if no file is uploaded
+        st.markdown("#### Required Columns")
+        st.markdown(f"- `{COL_STORE_ID}`\n- `{COL_WEEK}` or `{COL_DATE}` (e.g., 'Week Ending')\n- `{COL_ENGAGED_PCT}`")
+        st.markdown("#### Optional Columns")
+        st.markdown(f"- `{COL_RANK}` (e.g., 'Weekly Rank')\n- `{COL_QTD_PCT}` (e.g., 'Quarter to Date %')")
+        st.stop() # Stop execution until file is uploaded
+
+
+    # Proceed only if primary data loaded successfully
+    if df_all is None or df_all.empty:
+         # Error message was already shown during loading if it failed
+         st.warning("Cannot proceed with analysis as primary data is missing or invalid.")
+         st.stop()
 
 
     # --- Data Filtering ---
+    # Apply filters based on sidebar selections
     df_filtered = filter_dataframe(df_all, quarter_choice, week_choice, store_choice)
     df_comp_filtered = filter_dataframe(df_comp_all, quarter_choice, week_choice, store_choice) if df_comp_all is not None else None
 
 
+    # Check if filtering resulted in empty data
     if df_filtered.empty:
-        st.error("No data available for the selected filters. Please adjust filters or check the uploaded data.")
+        st.error("No data available for the selected filters (Quarter, Week, Store). Please adjust filters or check the uploaded data.")
         st.stop()
 
 
-    # --- Perform Calculations ---
-    # Note: Pass df_all for context needed beyond filtered scope (e.g., finding previous week)
+    # --- Perform Calculations on Filtered Data ---
+    # Execute analysis functions only after data is loaded and filtered
     summary_data = get_executive_summary_data(df_filtered, df_all, store_choice, store_list, trend_analysis_weeks)
-    store_perf_current = df_filtered.groupby(COL_STORE_ID)[COL_ENGAGED_PCT].mean() if not df_filtered.empty and COL_STORE_ID in df_filtered.columns and COL_ENGAGED_PCT in df_filtered.columns else pd.Series(dtype=float)
-
-    key_insights = generate_key_insights(df_filtered, summary_data['store_trends'], store_perf_current)
-
-
-    # Calculations needed for tabs (perform these *after* filtering)
+    store_perf_filtered = df_filtered.groupby(COL_STORE_ID)[COL_ENGAGED_PCT].mean() if COL_STORE_ID in df_filtered.columns and COL_ENGAGED_PCT in df_filtered.columns else pd.Series(dtype=float)
+    key_insights = generate_key_insights(df_filtered, summary_data['store_trends'], store_perf_filtered)
     district_trend = calculate_district_trends(df_filtered)
     district_trend_comp = calculate_district_trends(df_comp_filtered) if df_comp_filtered is not None else None
     store_stats = calculate_performance_categories(df_filtered) # Categories based on filtered period
@@ -1895,30 +2281,36 @@ def main():
 
     # --- Display Main Content ---
     display_executive_summary(summary_data)
+    st.markdown("---") # Add a separator
     display_key_insights(key_insights)
+    st.markdown("---") # Add a separator
+
 
     # --- Tabs ---
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # Define tab names with icons for better UI
+    tab_titles = [
         "📊 Engagement Trends",
         "📈 Store Comparison",
-        "📋 Store Performance Categories",
+        "📋 Store Performance", # Renamed for clarity
         "💡 Anomalies & Insights"
-    ])
+    ]
+    tab1, tab2, tab3, tab4 = st.tabs(tab_titles)
+
 
     with tab1:
         display_engagement_trends_tab(df_filtered, df_comp_filtered, show_ma, district_trend, district_trend_comp)
-
 
     with tab2:
         display_store_comparison_tab(df_filtered, week_choice)
 
     with tab3:
+        # Pass store_stats which contains category info
         display_performance_categories_tab(store_stats)
 
     with tab4:
         display_anomalies_insights_tab(anomalies_df, recommendations_df, z_threshold)
 
 
-
+# --- Entry Point ---
 if __name__ == "__main__":
     main()
