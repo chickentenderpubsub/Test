@@ -685,7 +685,6 @@ if uploaded_file is not None:
                     
                     # Format for display
                     display_improved = improved.copy()
-                    display_improved['Engaged Transaction %_first'] = display_improved['Engaged Transaction %_first'].apply(lambda x: f"{x:.2%}")
                     display_improved['Engaged Transaction %_last'] = display_improved['Engaged Transaction %_last'].apply(lambda x: f"{x:.2%}")
                     display_improved['Improvement'] = display_improved['Improvement'].apply(lambda x: f"{x:.2%}")
                     display_improved['Improvement %'] = display_improved['Improvement %'].round(1)
@@ -728,8 +727,8 @@ if uploaded_file is not None:
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.error("There was an error processing the uploaded file. Please check the file format and try again.")
+    except Exception as e:
+        st.error(f"There was an error processing the data: {e}")
 else:
     # Display instructions when no file is uploaded
     st.info("Welcome to the Club Publix Engagement Dashboard!")
@@ -807,4 +806,5 @@ else:
         margin=dict(l=40, r=40, t=50, b=40)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)_first'] = display_improved['Engaged Transaction %_first'].apply(lambda x: f"{x:.2%}")
+                    display_improved['Engaged Transaction %
