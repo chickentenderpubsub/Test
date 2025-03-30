@@ -601,57 +601,6 @@ with tab3:
         corr = row['Trend Correlation']; avg_val = row['Average Engagement']
         trend_desc, trend_icon = ("Strong positive trend","🔼") if corr > 0.3 else ("Mild positive trend","⬆️") if corr > 0.1 else ("Strong negative trend","🔽") if corr < -0.3 else ("Mild negative trend","⬇️") if corr < -0.1 else ("Stable trend","➡️")
         st.markdown(f"<div style='background-color:#2C2C2C; padding:20px; border-radius:10px; border-left:5px solid {color}; margin-bottom:20px;'><h3 style='color:{color}; margin-top:0;'>Store {selected_store} - {cat}</h3><p style='color:#FFFFFF;'><strong>Average Engagement:</strong> {avg_val:.2f}%</p><p style='color:#FFFFFF;'><strong>Trend:</strong> {trend_icon} {trend_desc} ({corr:.2f})</p><p style='color:#FFFFFF;'><strong>Explanation:</strong> {row['Explanation']}</p><h4 style='color:{color}; margin-top:1em;'>Recommended Action Plan:</h4><p style='color:#FFFFFF;'>{row['Action Plan']}</p></div>", unsafe_allow_html=True)
-
-    if selected_store:
-    
-        st.subheader(f"Store {selected_store} Engagement Trend")
-        
-        # Filter data for just this store
-        store_data = df_filtered[df_filtered['Store #'] == selected_store].sort_values('Week')
-        if not store_data.empty:
-            # Create a dataframe for district average to compare
-            dist_avg = df_filtered.groupby('Week', as_index=False)['Engaged Transaction %'].mean()
-            dist_avg.rename(columns={'Engaged Transaction %': 'District Average'}, inplace=True)
-            
-            # Prepare chart layers
-            store_line = alt.Chart(store_data).mark_line(color='#1565C0', strokeWidth=3).encode(
-                x='Week:O',
-                y=alt.Y('Engaged Transaction %:Q', title='Engagement %'),
-                tooltip=['Week:O', alt.Tooltip('Engaged Transaction %:Q', format='.2f')]
-            )
-            
-            store_points = alt.Chart(store_data).mark_circle(size=60).encode(
-                x='Week:O',
-                y='Engaged Transaction %:Q',
-                tooltip=['Week:O', alt.Tooltip('Engaged Transaction %:Q', format='.2f')]
-            )
-            
-            # Add regression line to show trend
-            regression = alt.Chart(store_data).transform_regression(
-                'Week', 'Engaged Transaction %'
-            ).mark_line(color='white', strokeDash=[3,3], strokeWidth=2).encode(
-                x='Week:O',
-                y='Engaged Transaction %:Q'
-            )
-            
-            # Add district average line
-            dist_line = alt.Chart(dist_avg).mark_line(color='gray', strokeDash=[4,2], strokeWidth=2).encode(
-                x='Week:O',
-                y=alt.Y('District Average:Q'),
-                tooltip=[alt.Tooltip('District Average:Q', format='.2f', title='District Avg')]
-            )
-            
-            # Combine chart elements
-            chart = alt.layer(store_line, store_points, regression, dist_line).properties(
-                height=300
-            ).resolve_scale(
-                y='shared'
-            )
-            
-            st.altair_chart(chart, use_container_width=True)
-            st.caption("Colored line = Store trend, white dashed line = regression fit, gray dashed line = district average.")
-        else:
-            st.info("Not enough data available to display the trend.")
         if cat in ["Improving","Requires Intervention"]:
             st.subheader("Improvement Opportunities")
             top_stores = store_stats[store_stats['Category'] == "Star Performer"]['Store #'].tolist()
