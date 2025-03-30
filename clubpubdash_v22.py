@@ -5,7 +5,7 @@ import altair as alt
 import datetime
 
 # Page configuration and custom CSS
-st.set_page_config(page_title="Publix District 20 Engagement Dashboard", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Club Publix Engagement Dashboard", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""
 <style>
     .metric-card { background-color: #f5f5f5; border-radius: 10px; padding: 15px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
@@ -18,8 +18,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Title and introduction
-st.markdown("<h1 class='dashboard-title'>Publix District 20 Engagement Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("**Publix Supermarkets – District 20** engagement analysis dashboard. Upload weekly engagement data to explore key performance indicators, trends, and opportunities across 10 stores. Use the filters on the left to drill down by time period or store.")
+st.markdown("<h1 class='dashboard-title'>Club Publix Engagement Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("**Club Publix** engagement analysis dashboard. Upload weekly engagement data to explore key performance indicators, trends, and opportunities across your stores. Use the filters on the left to drill down by time period or store.")
 
 @st.cache_data
 def load_data(uploaded_file):
@@ -55,7 +55,6 @@ def load_data(uploaded_file):
         df['Week'] = df['Week'].astype(int)
         df = df.sort_values(['Week', 'Store #'])
     return df
-
 # Sidebar for data upload
 st.sidebar.header("Data Input")
 data_file = st.sidebar.file_uploader("Upload engagement data (Excel or CSV)", type=['csv', 'xlsx'])
