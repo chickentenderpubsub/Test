@@ -9,12 +9,16 @@
 <h4 align="center">A personal project for monitoring and analyzing Club Publix engagement across stores — built by a Publix Assistant Customer Service Manager for real-world use by managers at every level.</h4>
 
 <p align="center">
-  <a href="#project-overview">Project Overview</a> •
-  <a href="#key-features">Key Features</a> •
-  <a href="#how-to-use">How To Use</a> •
-  <a href="#tech-stack">Tech Stack</a> •
-  <a href="#credits">Credits</a> •
-  <a href="#disclaimer">Disclaimer</a>
+  <a href="#-project-overview">Project Overview</a> •
+  <a href="#-key-features">Key Features</a> •
+  <a href="#-how-to-use">How To Use</a> •
+  <a href="#-tech-stack">Tech Stack</a> •
+  <a href="#-credits">Credits</a> •
+  <a href="#-disclaimer">Disclaimer</a>
+</p>
+
+<p align="center">
+  <img src="images/dash.gif" alt="Dashboard GIF" />
 </p>
 
 <p align="center">
