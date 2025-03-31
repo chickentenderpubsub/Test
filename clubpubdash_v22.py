@@ -5,100 +5,140 @@ import plotly.graph_objects as go
 
 # --- Page Configuration ---
 st.set_page_config(
-    page_title="Publix Dashboard Clone",
-    layout="wide",  # Use wide layout
-    initial_sidebar_state="expanded" # Keep sidebar open initially
+    page_title="Publix Dashboard", # Updated Title
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
+# --- Publix Brand Colors ---
+publix_green = "#007749"
+light_green_accent = "#43B02A" # Example lighter green for potential accents
+off_white_background = "#FAFAF7"
+white_panel = "#FFFFFF"
+dark_gray_text = "#2E2E2E"
+muted_gray_lines = "#E0E0E0" # Light gray for borders/secondary elements
+
 # --- Custom CSS for Styling ---
-# (Approximating colors and styles from the image)
-st.markdown("""
+st.markdown(f"""
 <style>
     /* Main container background */
-    .main .block-container {
+    .main .block-container {{
         padding-top: 2rem;
         padding-bottom: 2rem;
         padding-left: 3rem;
         padding-right: 3rem;
-        background-color: #f0f2f6; /* Light grey background */
-    }
+        background-color: {off_white_background}; /* Soft Off-White/Cream */
+    }}
 
     /* Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #004d40; /* Dark green background */
+    [data-testid="stSidebar"] {{
+        background-color: {publix_green}; /* Publix Green */
         padding-top: 1.5rem;
-    }
-    [data-testid="stSidebar"] .stRadio > label,
-    [data-testid="stSidebar"] .stImage > img {
-        color: #ffffff; /* White text for sidebar items */
-    }
-    /* Styling for the radio button labels in sidebar */
-     [data-testid="stSidebar"] .stRadio [role="radiogroup"] label {
+    }}
+    [data-testid="stSidebar"] .stRadio > label, /* Sidebar labels */
+    [data-testid="stSidebar"] .stImage > img,  /* Sidebar image (if used) */
+    [data-testid="stSidebar"] h1 {{ /* Sidebar 'P' logo */
+        color: {white_panel}; /* White text/elements on green */
+    }}
+    /* Styling for the radio button options in sidebar */
+     [data-testid="stSidebar"] .stRadio [role="radiogroup"] label {{
         padding: 0.5rem 1rem;
         margin-bottom: 0.5rem;
-        border-radius: 0.375rem; /* Rounded corners for selection */
-        color: #ffffff; /* White text */
-    }
-    /* Style for the selected radio button in sidebar */
-    [data-testid="stSidebar"] .stRadio [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {
-        background-color: #00796b; /* Slightly lighter green for selection */
-        color: #ffffff; /* White text */
-        font-weight: bold;
-    }
+        border-radius: 0.375rem;
+        color: {white_panel}; /* White text */
+        transition: background-color 0.2s ease; /* Smooth transition */
+    }}
+     /* Style for HOVERED radio button in sidebar */
+     [data-testid="stSidebar"] .stRadio [role="radiogroup"] label:hover {{
+         background-color: rgba(255, 255, 255, 0.1); /* Subtle white highlight on hover */
+     }}
+    /* Style for the SELECTED radio button in sidebar */
+    [data-testid="stSidebar"] .stRadio [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {{
+        background-color: transparent; /* No background color change on selection */
+        color: {white_panel}; /* Keep text white */
+        font-weight: bold; /* Make selected item bold */
+        border: 1px solid {white_panel}; /* Add subtle border to selected */
+    }}
+    [data-testid="stSidebar"] hr {{ /* Sidebar separator */
+        border-top: 1px solid rgba(255, 255, 255, 0.3); /* Lighter separator */
+        margin-top: 0.5rem;
+        margin-bottom: 1rem;
+    }}
 
 
     /* Card Styling */
-    .metric-card {
-        background-color: #ffffff; /* White background for cards */
-        padding: 1.5rem;          /* Padding inside cards */
-        border-radius: 0.5rem;    /* Rounded corners */
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
-        margin-bottom: 1rem;      /* Space below cards */
-        height: 100%;             /* Make cards in a row equal height */
-        display: flex;            /* Use flexbox for content alignment */
-        flex-direction: column;   /* Stack content vertically */
-        justify-content: space-between; /* Space out content */
-    }
-    .metric-card h4 { /* Style for card titles */
-        margin-bottom: 0.5rem;
-        color: #5f6368; /* Greyish color for titles */
-        font-size: 1rem;
-    }
-     .metric-card .stMetric { /* Style for metric values */
-         /* background-color: transparent !important; /* Override default Streamlit metric background */ */
-         padding: 0 !important; /* Remove default padding if needed */
-         border: none !important; /* Remove default border */
-     }
-     .metric-card [data-testid="stMetricValue"] {
-         font-size: 2.2rem; /* Larger font for main metric value */
-         font-weight: bold;
-         color: #202124; /* Darker color for metric value */
-     }
-    .metric-card [data-testid="stMetricDelta"] {
-         font-size: 1rem; /* Font size for delta */
+    .metric-card {{
+        background-color: {white_panel};       /* Clean white panels */
+        padding: 1.2rem;                     /* Slightly reduced padding */
+        border-radius: 0.5rem;               /* Soft rounded corners */
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Subtle shadow for softness */
+        border: 1px solid {muted_gray_lines}; /* Optional: very light border */
+        margin-bottom: 1rem;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }}
+    .metric-card h4 {{ /* Style for card titles */
+        margin-bottom: 0.8rem; /* Slightly more space below title */
+        color: {dark_gray_text}; /* Charcoal/Dark Gray Text */
+        font-size: 0.95rem; /* Slightly smaller title */
+        font-weight: 500; /* Medium weight */
+    }}
+     /* Streamlit Metric component specific styling */
+     .metric-card [data-testid="stMetricLabel"] {{
+         color: {dark_gray_text}; /* Ensure label (if shown) is dark gray */
+         font-size: 0.9rem;
+     }}
+     .metric-card [data-testid="stMetricValue"] {{
+         font-size: 2.5rem; /* Larger font for main metric value */
+         font-weight: 600; /* Semi-bold */
+         color: {publix_green}; /* Publix Green for emphasis */
+         line-height: 1.2; /* Adjust line height */
+         margin-bottom: 0rem; /* Reduce space below value */
+     }}
+    .metric-card [data-testid="stMetricDelta"] {{
+         font-size: 1rem;
          font-weight: normal;
-     }
+         color: {dark_gray_text}; /* Dark gray for delta */
+         margin-top: -0.2rem; /* Pull delta slightly closer */
+     }}
+     /* Ensure delta up/down icons are appropriately colored if needed */
+     .metric-card [data-testid="stMetricDelta"] .stMetricDeltaPositive {{ color: {publix_green}; }}
+     .metric-card [data-testid="stMetricDelta"] .stMetricDeltaNegative {{ color: #D32F2F; }} /* Example: Red for negative */
 
-    /* Center align the donut chart */
-     .donut-container {
+    /* Center align the donut chart container */
+     .donut-container {{
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100%; /* Ensure it takes full card height for centering */
-     }
+        height: 100%;
+     }}
 
-    /* Ensure charts within cards don't overflow */
-    .metric-card .stPlotlyChart, .metric-card .stChart {
-        margin-top: 0.5rem; /* Add some space above charts in cards */
-        width: 100% !important; /* Ensure chart takes full width */
-    }
+    /* Ensure charts within cards don't overflow and have consistent spacing*/
+    .metric-card .stPlotlyChart,
+    .metric-card .stChart {{
+        margin-top: 0.5rem;
+        width: 100% !important;
+    }}
+    /* Style Streamlit Charts elements */
+    .metric-card .stChart {{
+        min-height: 100px; /* Ensure small charts have some height */
+    }}
 
-     /* Hide default Streamlit headers and footers if desired */
-    /*
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    */
+    /* General Text and Selectors */
+    body, .stApp {{ /* Attempt to set base font color */
+        color: {dark_gray_text};
+    }}
+    .stSelectbox label {{ /* Dropdown labels */
+        color: {dark_gray_text};
+        font-weight: 500;
+        font-size: 0.9rem;
+    }}
+    /* Divider lines */
+     hr {{
+         border-top: 1px solid {muted_gray_lines};
+     }}
 
 </style>
 """, unsafe_allow_html=True)
@@ -106,16 +146,14 @@ st.markdown("""
 
 # --- Sidebar ---
 with st.sidebar:
-    # You would replace 'path/to/your/logo.png' with the actual path or URL
-    # Using a placeholder text logo for now
-    # st.image("path/to/your/logo.png", width=50) # Example using image file
-    st.markdown("<h1 style='color: #4CAF50; text-align: left; font-size: 2.5rem; margin-left: 1rem;'>P</h1>", unsafe_allow_html=True)
+    # Publix 'P' logo using Markdown H1
+    st.markdown(f"<h1 style='color: {white_panel}; text-align: left; font-size: 2.5rem; margin-left: 1rem; margin-bottom: 0.5rem; font-weight: bold;'>P</h1>", unsafe_allow_html=True)
     st.markdown("---") # Separator line
 
     page = st.radio(
-        "Navigation",
+        "Navigation", # This label is technically hidden by label_visibility
         ["Overview", "Sales", "Labor", "Engagement"],
-        label_visibility="collapsed" # Hide the "Navigation" label itself
+        label_visibility="collapsed" # Hide the "Navigation" label
     )
 
 # --- Main Content Area ---
@@ -123,13 +161,14 @@ with st.sidebar:
 # Top Row: Filters
 col1, col2, col3 = st.columns(3)
 with col1:
+    # Using dummy options, replace with actual ones
     date_range = st.selectbox("Date Range", ["Last 7 Days", "Last 30 Days", "This Month", "Custom"], index=0)
 with col2:
     store_number = st.selectbox("Store Number", ["All Stores", "Store 101", "Store 205", "Store 315"], index=1)
 with col3:
     department = st.selectbox("Department", ["All Departments", "Grocery", "Produce", "Bakery", "Deli"], index=0)
 
-st.write("---") # Add a visual separator
+st.markdown("---") # Add a visual separator
 
 # --- Display Content Based on Sidebar Selection ---
 if page == "Overview":
@@ -140,89 +179,96 @@ if page == "Overview":
     with col1:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.markdown("<h4>Customer Satisfaction Score</h4>", unsafe_allow_html=True)
-        st.metric(label="", value="84", delta="3") # Label is handled by h4
-        # Dummy data for the small bar chart
+        # Using an Up arrow unicode character for the delta
+        st.metric(label="", value="84", delta="▲ 3") # Empty label because handled by h4
+        # Dummy data for the small bar chart - use Publix Green
         chart_data = pd.DataFrame(np.random.rand(5, 1) * 50 + 30, columns=['Score'])
-        st.bar_chart(chart_data, height=100)
+        st.bar_chart(chart_data, height=100, color=publix_green) # Use brand color
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.markdown("<h4>Shrink Percentage</h4>", unsafe_allow_html=True)
         st.metric(label="", value="2.5%")
-        # Dummy data for the small line chart
+        # Dummy data for the small line chart - use Publix Green
         chart_data = pd.DataFrame(np.random.randn(20, 1).cumsum() + 2.5, columns=['Shrink'])
-        st.line_chart(chart_data, height=100)
+        # Use brand color. Convert HEX to RGB tuple for st.line_chart color param if needed, but HEX string often works.
+        st.line_chart(chart_data, height=100, color=publix_green)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col3:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.markdown("<h4>Club Publix Sign-Ups</h4>", unsafe_allow_html=True)
-        # Format the number with a comma
         st.metric(label="", value="{:,}".format(12500))
-        # Dummy data for the small line chart
+        # Dummy data for the small line chart - use Publix Green
         chart_data = pd.DataFrame(np.random.randn(20, 1).cumsum() + 12000, columns=['SignUps'])
-        st.line_chart(chart_data, height=100)
+        st.line_chart(chart_data, height=100, color=publix_green)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Third Row: Larger Charts
-    col4, col5 = st.columns([2, 1]) # Give more space to the line chart
+    col4, col5 = st.columns([2, 1]) # Keep line chart wider
 
     with col4:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.markdown("<h4>Weekly Engagement Score</h4>", unsafe_allow_html=True)
         # Dummy data for the larger line chart
         engagement_data = pd.DataFrame(
-            np.random.randn(52, 1).cumsum() + 50, # 52 weeks
+            # Smoother random walk for a nicer looking line
+            (np.random.randn(52)/5).cumsum() + 50, # 52 weeks
             columns=['Score']
         )
-        # Ensure y-axis starts near the data minimum, not necessarily 0 if data is far from it
-        min_val = engagement_data['Score'].min()
-        st.line_chart(engagement_data, height=250, use_container_width=True) # Let y-axis be auto, or set ylim=[min_val-5, engagement_data['Score'].max()+5] if needed
+        # Plot using Publix Green
+        st.line_chart(engagement_data, height=250, use_container_width=True, color=publix_green)
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col5:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown('<div class="donut-container">', unsafe_allow_html=True) # Container for centering
+        st.markdown('<div class="donut-container">', unsafe_allow_html=True) # For centering
 
-        # Donut chart using Plotly
+        # Donut chart using Plotly with updated colors
         percentage_value = 32
         fig = go.Figure(data=[go.Pie(
             values=[percentage_value, 100 - percentage_value],
-            hole=.6, # This makes it a donut chart
-            marker_colors=['#4CAF50', '#E0E0E0'], # Green and grey colors
-            textinfo='none', # Hide labels on slices
-            hoverinfo='none', # Disable hover info
-            sort=False, # Keep the order [value, remainder]
+            hole=.65, # Slightly larger hole can look cleaner
+            marker_colors=[publix_green, muted_gray_lines], # Publix Green and Muted Gray
+            textinfo='none',
+            hoverinfo='none',
+            sort=False,
             direction='clockwise'
         )])
 
         fig.update_layout(
             showlegend=False,
-            margin=dict(l=10, r=10, t=10, b=10), # Reduce margins
-            height=200, # Adjust height
-            width=200,  # Adjust width
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=200, # Keep dimensions or adjust as needed
+            width=200,
             paper_bgcolor='rgba(0,0,0,0)', # Transparent background
             plot_bgcolor='rgba(0,0,0,0)',
-            # Add annotation for the percentage in the center
-            annotations=[dict(text=f'<b>{percentage_value}%</b>', x=0.5, y=0.5, font_size=24, showarrow=False, font_color='#202124')]
+            # Annotation for the percentage in the center - use dark gray text
+            annotations=[dict(
+                text=f'<b>{percentage_value}%</b>',
+                x=0.5, y=0.5, font_size=24, showarrow=False,
+                font=dict(color=dark_gray_text) # Use dark gray text
+            )]
         )
-        st.plotly_chart(fig, use_container_width=True) # use_container_width might make it slightly larger than 200x200, adjust if needed
+        # Use container width can sometimes distort small fixed-size charts, test this
+        st.plotly_chart(fig, use_container_width=True)
 
         st.markdown('</div>', unsafe_allow_html=True) # Close donut-container
         st.markdown('</div>', unsafe_allow_html=True) # Close metric-card
 
+# --- Placeholder sections for other pages ---
 elif page == "Sales":
     st.header("Sales Data")
-    st.write("Display Sales related charts and data here.")
-    # Add relevant components for the Sales page
+    st.write("Display Sales related charts and data here, styled consistently.")
+    # Add relevant components for the Sales page, using brand colors
 
 elif page == "Labor":
     st.header("Labor Data")
-    st.write("Display Labor related charts and data here.")
-    # Add relevant components for the Labor page
+    st.write("Display Labor related charts and data here, styled consistently.")
+    # Add relevant components for the Labor page, using brand colors
 
 elif page == "Engagement":
     st.header("Engagement Data")
-    st.write("Display Engagement related charts and data here.")
-    # Add relevant components for the Engagement page
+    st.write("Display Engagement related charts and data here, styled consistently.")
+    # Add relevant components for the Engagement page, using brand colors
