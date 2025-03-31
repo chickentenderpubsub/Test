@@ -449,84 +449,84 @@ st.set_page_config(
 )
 
 # Custom CSS for Publix theming
-st.markdown(f"""<style>
-    body {{ font-family: sans-serif; }}
-    .stApp {{ background-color: {BACKGROUND_COLOR}; }}
+st.markdown("""<style>
+    body { font-family: sans-serif; }
+    .stApp { background-color: """ + BACKGROUND_COLOR + """; }
     
     /* Sidebar styling */
-    [data-testid="stSidebar"] > div:first-child {{ 
-        background-color: {PUBLIX_GREEN_DARK}; 
+    [data-testid="stSidebar"] > div:first-child { 
+        background-color: """ + PUBLIX_GREEN_DARK + """; 
         padding-top: 1rem; 
-    }}
+    }
     [data-testid="stSidebar"] h1, 
     [data-testid="stSidebar"] h2, 
     [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] .st-caption {{ 
-        color: {TEXT_COLOR_LIGHT} !important; 
+    [data-testid="stSidebar"] .st-caption { 
+        color: """ + TEXT_COLOR_LIGHT + """ !important; 
         font-weight: normal; 
-    }}
-    [data-testid="stSidebar"] .st-emotion-cache-1bzkvze {{ 
-        color: {TEXT_COLOR_LIGHT} !important; 
-    }}
-    [data-testid="stSidebar"] small {{ 
+    }
+    [data-testid="stSidebar"] .st-emotion-cache-1bzkvze { 
+        color: """ + TEXT_COLOR_LIGHT + """ !important; 
+    }
+    [data-testid="stSidebar"] small { 
         color: rgba(255, 255, 255, 0.7) !important; 
-    }}
+    }
     
     /* Sidebar inputs styling */
     [data-testid="stSidebar"] .stSelectbox > div, 
-    [data-testid="stSidebar"] .stMultiselect > div {{ 
+    [data-testid="stSidebar"] .stMultiselect > div { 
         background-color: rgba(255, 255, 255, 0.1); 
         border: none; 
         border-radius: 4px; 
-    }}
+    }
     [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div, 
-    [data-testid="stSidebar"] .stMultiselect div[data-baseweb="select"] > div {{ 
-        color: {TEXT_COLOR_LIGHT}; 
-    }}
+    [data-testid="stSidebar"] .stMultiselect div[data-baseweb="select"] > div { 
+        color: """ + TEXT_COLOR_LIGHT + """; 
+    }
     [data-testid="stSidebar"] .stSelectbox svg, 
-    [data-testid="stSidebar"] .stMultiselect svg {{ 
-        fill: {TEXT_COLOR_LIGHT}; 
-    }}
-    [data-testid="stSidebar"] .stMultiselect span[data-baseweb="tag"] svg {{ 
-        fill: {TEXT_COLOR_LIGHT}; 
-    }}
+    [data-testid="stSidebar"] .stMultiselect svg { 
+        fill: """ + TEXT_COLOR_LIGHT + """; 
+    }
+    [data-testid="stSidebar"] .stMultiselect span[data-baseweb="tag"] svg { 
+        fill: """ + TEXT_COLOR_LIGHT + """; 
+    }
     
     /* Sidebar button styling */
-    [data-testid="stSidebar"] .stButton>button {{ 
+    [data-testid="stSidebar"] .stButton>button { 
         background-color: transparent; 
-        color: {TEXT_COLOR_LIGHT}; 
+        color: """ + TEXT_COLOR_LIGHT + """; 
         border: 1px solid rgba(255, 255, 255, 0.5); 
         font-weight: normal; 
         padding: 5px 10px; 
         margin-top: 0.5rem; 
-    }}
-    [data-testid="stSidebar"] .stButton>button:hover {{ 
+    }
+    [data-testid="stSidebar"] .stButton>button:hover { 
         background-color: rgba(255, 255, 255, 0.1); 
-        border-color: {TEXT_COLOR_LIGHT}; 
-    }}
+        border-color: """ + TEXT_COLOR_LIGHT + """; 
+    }
     
     /* File uploader styling */
-    [data-testid="stSidebar"] .stFileUploader button {{ 
+    [data-testid="stSidebar"] .stFileUploader button { 
         border: 1px dashed rgba(255, 255, 255, 0.5); 
         background-color: rgba(255, 255, 255, 0.05); 
-        color: {TEXT_COLOR_LIGHT}; 
-    }}
-    [data-testid="stSidebar"] .stFileUploader button:hover {{ 
-        border-color: {TEXT_COLOR_LIGHT}; 
+        color: """ + TEXT_COLOR_LIGHT + """; 
+    }
+    [data-testid="stSidebar"] .stFileUploader button:hover { 
+        border-color: """ + TEXT_COLOR_LIGHT + """; 
         background-color: rgba(255, 255, 255, 0.1); 
-    }}
+    }
     
     /* Main content styling */
-    .main .block-container {{ 
+    .main .block-container { 
         padding: 1.5rem 2rem 2rem 2rem; 
         max-width: 95%; 
-    }}
+    }
     
     /* Card styling */
-    .metric-card {{ 
-        background-color: {CARD_BACKGROUND_COLOR}; 
-        border: 1px solid {BORDER_COLOR}; 
+    .metric-card { 
+        background-color: """ + CARD_BACKGROUND_COLOR + """; 
+        border: 1px solid """ + BORDER_COLOR + """; 
         border-radius: 8px; 
         padding: 1rem 1.2rem; 
         box-shadow: 0 1px 3px rgba(0,0,0,0.03); 
@@ -534,128 +534,128 @@ st.markdown(f"""<style>
         display: flex; 
         flex-direction: column; 
         justify-content: space-between; 
-    }}
-    .chart-card {{ 
-        background-color: {CARD_BACKGROUND_COLOR}; 
-        border: 1px solid {BORDER_COLOR}; 
+    }
+    .chart-card { 
+        background-color: """ + CARD_BACKGROUND_COLOR + """; 
+        border: 1px solid """ + BORDER_COLOR + """; 
         border-radius: 8px; 
         padding: 1.2rem; 
         box-shadow: 0 1px 3px rgba(0,0,0,0.03); 
-    }}
+    }
     
     /* Metric styling */
-    .stMetric {{ 
+    .stMetric { 
         background-color: transparent !important; 
         border: none !important; 
         padding: 0 !important; 
         text-align: left; 
-        color: {TEXT_COLOR_DARK}; 
+        color: """ + TEXT_COLOR_DARK + """; 
         font-size: 1rem; 
         height: 100%; 
         display: flex; 
         flex-direction: column; 
-    }}
-    .stMetric > label {{ 
-        color: {TEXT_COLOR_MEDIUM} !important; 
+    }
+    .stMetric > label { 
+        color: """ + TEXT_COLOR_MEDIUM + """ !important; 
         font-weight: normal !important; 
         font-size: 0.85em !important; 
         margin-bottom: 0.25rem; 
         order: 1; 
-    }}
-    .stMetric > div:nth-of-type(1) {{ 
-        color: {TEXT_COLOR_DARK} !important; 
+    }
+    .stMetric > div:nth-of-type(1) { 
+        color: """ + TEXT_COLOR_DARK + """ !important; 
         font-size: 2.0em !important; 
         font-weight: bold !important; 
         line-height: 1.1 !important; 
         margin-bottom: 0.25rem; 
         order: 0; 
-    }}
-    .stMetric > div:nth-of-type(2) {{ 
+    }
+    .stMetric > div:nth-of-type(2) { 
         font-size: 0.85em !important; 
         font-weight: bold; 
-        color: {TEXT_COLOR_MEDIUM} !important; 
+        color: """ + TEXT_COLOR_MEDIUM + """ !important; 
         order: 2; 
         margin-top: auto; 
-    }}
-    .stMetric .stMetricDelta {{ 
+    }
+    .stMetric .stMetricDelta { 
         padding-top: 5px; 
-    }}
-    .stMetric .stMetricDelta span[style*="color: rgb(46, 125, 50)"] {{ 
-        color: {PUBLIX_GREEN_BRIGHT} !important; 
-    }}
-    .stMetric .stMetricDelta span[style*="color: rgb(198, 40, 40)"] {{ 
+    }
+    .stMetric .stMetricDelta span[style*="color: rgb(46, 125, 50)"] { 
+        color: """ + PUBLIX_GREEN_BRIGHT + """ !important; 
+    }
+    .stMetric .stMetricDelta span[style*="color: rgb(198, 40, 40)"] { 
         color: #D32F2F !important; 
-    }}
-    .stMetric .metric-sparkline {{ 
+    }
+    .stMetric .metric-sparkline { 
         margin-top: auto; 
         order: 3; 
         padding-top: 10px; 
         line-height: 0; 
         opacity: 0.7; 
-    }}
+    }
     
     /* Tab styling */
-    div[data-baseweb="tab-list"] {{ 
-        border-bottom: 2px solid {BORDER_COLOR}; 
+    div[data-baseweb="tab-list"] { 
+        border-bottom: 2px solid """ + BORDER_COLOR + """; 
         padding-left: 0; 
         margin-bottom: 1.5rem; 
-    }}
-    button[data-baseweb="tab"] {{ 
+    }
+    button[data-baseweb="tab"] { 
         background-color: transparent; 
-        color: {TEXT_COLOR_MEDIUM}; 
+        color: """ + TEXT_COLOR_MEDIUM + """; 
         padding: 0.6rem 0.1rem; 
         margin-right: 1.5rem; 
         border-bottom: 2px solid transparent; 
         font-weight: normal; 
-    }}
-    button[data-baseweb="tab"]:hover {{ 
+    }
+    button[data-baseweb="tab"]:hover { 
         background-color: transparent; 
-        color: {TEXT_COLOR_DARK}; 
-        border-bottom-color: {BORDER_COLOR}; 
-    }}
-    button[data-baseweb="tab"][aria-selected="true"] {{ 
-        color: {PUBLIX_GREEN_BRIGHT}; 
+        color: """ + TEXT_COLOR_DARK + """; 
+        border-bottom-color: """ + BORDER_COLOR + """; 
+    }
+    button[data-baseweb="tab"][aria-selected="true"] { 
+        color: """ + PUBLIX_GREEN_BRIGHT + """; 
         font-weight: bold; 
-        border-bottom-color: {PUBLIX_GREEN_BRIGHT}; 
-    }}
+        border-bottom-color: """ + PUBLIX_GREEN_BRIGHT + """; 
+    }
     
     /* Text formatting */
-    h1, h2, h3 {{ 
-        color: {TEXT_COLOR_DARK}; 
+    h1, h2, h3 { 
+        color: """ + TEXT_COLOR_DARK + """; 
         font-weight: bold; 
-    }}
-    h3 {{ 
+    }
+    h3 { 
         margin-top: 1.5rem; 
         margin-bottom: 0.8rem; 
         font-size: 1.3rem; 
-    }}
-    h4 {{ 
+    }
+    h4 { 
         margin-top: 1rem; 
         margin-bottom: 0.5rem; 
         font-size: 1.1rem; 
-        color: {TEXT_COLOR_MEDIUM}; 
+        color: """ + TEXT_COLOR_MEDIUM + """; 
         font-weight: bold; 
-    }}
+    }
     
     /* Expander styling */
-    [data-testid="stExpander"] {{ 
-        border: 1px solid {BORDER_COLOR}; 
+    [data-testid="stExpander"] { 
+        border: 1px solid """ + BORDER_COLOR + """; 
         border-radius: 6px; 
-        background-color: {CARD_BACKGROUND_COLOR}; 
-    }}
-    [data-testid="stExpander"] summary {{ 
+        background-color: """ + CARD_BACKGROUND_COLOR + """; 
+    }
+    [data-testid="stExpander"] summary { 
         font-weight: normal; 
-        color: {TEXT_COLOR_MEDIUM}; 
-    }}
-    [data-testid="stExpander"] summary:hover {{ 
-        color: {PUBLIX_GREEN_BRIGHT}; 
-    }}
+        color: """ + TEXT_COLOR_MEDIUM + """; 
+    }
+    [data-testid="stExpander"] summary:hover { 
+        color: """ + PUBLIX_GREEN_BRIGHT + """; 
+    }
     
     /* Horizontal rule */
-    hr {{ 
-        border-top: 1px solid {BORDER_COLOR}; 
+    hr { 
+        border-top: 1px solid """ + BORDER_COLOR + """; 
         margin: 1.5rem 0; 
-    }}
+    }
 </style>""", unsafe_allow_html=True)
 
 # --------------------------------------------------------
