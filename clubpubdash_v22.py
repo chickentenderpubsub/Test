@@ -664,28 +664,4 @@ st.markdown(f"""<style>
 st.sidebar.markdown(f"""<div style="text-align: center; padding-bottom: 1rem;">
 <svg width="40" height="40" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
 <circle cx="50" cy="50" r="50" fill="{TEXT_COLOR_LIGHT}"/>
-<path d="M63.7148 25H42.4297C35.1445 25 29.2852 30.8594 29.2852 38.1445V43.6055C29.2852 46.6523 31.7734 49.1406 34.8203 49.1406H46.0117V61.8555C46.0117 64.9023 48.4999 67.3906 51.5468 67.3906H57.1406C60.1875 67.3906 62.6757 64.9023 62.6757 61.8555V49.1406H66.4804C68.0234 49.1406 69.2851 47.8789 69.2851 46.3359V31.0195C69.2851 27.7148 66.7304 25 63.7148 25ZM57.1406 55.6641H51.5468V43.6055C51.5468 40.5586 49.0585 38.0703 46.0117 38.0703H40.4179C39.1992 38.0703 38.2226 39.0469 38.2226 40.1914V43.6055C38.2226 44.75 39.1992 45.7266 40.4179 45.7266H51.5468C54.5937 45.7266 57.1406 48.2148 57.1406 51.2617V55.6641Z" fill="{PUBLIX_GREEN_DARK}"/>
-</svg></div>""", unsafe_allow_html=True)
-
-st.sidebar.header("Data Upload")
-data_file = st.sidebar.file_uploader("Engagement Data", type=['csv', 'xlsx', 'xls'], key="primary_upload", label_visibility="collapsed")
-
-df = load_data(data_file)
-
-if df.empty:
-    st.info("⬆️ Please upload an engagement data file using the sidebar to begin.")
-    st.stop()
-
-# Sidebar Filters
-st.sidebar.header("Filters")
-
-# Quarter filter
-quarter_choice = "All"
-q_num = None  # Initialize q_num
-if 'Quarter' in df.columns and df['Quarter'].notna().any():
-    quarters = pd.to_numeric(df['Quarter'], errors='coerce').dropna().unique()
-    quarters = sorted([int(q) for q in quarters])
-    quarter_options = ["All"] + [f"Q{q}" for q in quarters]
-    quarter_choice = st.sidebar.selectbox("Quarter", quarter_options, index=0, key="quarter_select")
-    if quarter_choice != "All":
-        try:
+<path d="M63.7148 25H42.4297C35.1445 25 29.2852 30.8594 29.2852 38.1445V43.6055C29.2852 46.6523 31.7734 49.1406 34.8203 49.1406H46.0117V61.8555C46.0117 64.9023 48.4999 67.3906 51.5468 67.3906H57.1406C60.1875 67.3906 62.6757 64.9023 62.6757 61.8555V49.1406H66.4804C68.0234 49.1406 69.2851 47.8789 69.2851 46.3359V31.0195C69.2851 27.7148 66.7304 25 63.7148 25ZM57.1406 55.6641H51.5468V43.6055C51.5468
